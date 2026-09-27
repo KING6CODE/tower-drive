@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#070A16">
 <title>Tower Drive — Défense Holographique</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+@font-face{font-family:Rajdhani;font-style:normal;font-weight:500;font-display:swap;src:url('android/app/src/main/assets/fonts/Rajdhani-Medium.ttf') format('truetype')}
+@font-face{font-family:Rajdhani;font-style:normal;font-weight:600;font-display:swap;src:url('android/app/src/main/assets/fonts/Rajdhani-SemiBold.ttf') format('truetype')}
+@font-face{font-family:Rajdhani;font-style:normal;font-weight:700;font-display:swap;src:url('android/app/src/main/assets/fonts/Rajdhani-Bold.ttf') format('truetype')}
 :root{
  --amber:#FFB347;--amber2:#FFE0B0;--amberD:#1A0E02;
  --bg:#070A16;--panel:#10172E;--panel2:#0C1226;--line:#243054;--line2:#3A4B82;
@@ -464,7 +465,7 @@ button:active{transform:scale(.975)}
      <div class="pbarW"><div class="pbarF" id="goalBar" style="width:0%"></div></div>
     </div>
     <span class="chfW"><button id="btnFight" class="chfB">LANCER LA SIMULATION</button></span>
-    <span class="chfW mag hidden" id="wBoost"><button id="btnBoost" class="chfB">BOOST ×2 CRÉDITS — VIDÉO</button></span>
+    <span class="chfW mag hidden" id="wBoost"><button id="btnBoost" class="chfB">BOOST ×2 CRÉDITS</button></span>
     <span class="chfW grn hidden" id="wResume"><button id="btnResume" class="chfB">REPRENDRE</button></span>
     <div class="mspc"></div>
    </div>
@@ -631,7 +632,7 @@ button:active{transform:scale(.975)}
   </svg>
   <div id="adCount">3</div>
  </div>
- <div style="font:500 13px 'Rajdhani';color:#AEBBE4">Emplacement vidéo récompensée (AdMob)</div>
+ <div style="font:500 13px 'Rajdhani';color:#AEBBE4">Transmission en cours</div>
 </div></div></div>
 <div class="ov" id="ovCf"><div class="ovBoxW"><div class="ovBox">
  <div class="ot">CONFIRMER</div>
@@ -2048,7 +2049,7 @@ function renderBattle(){
  else rw.classList.add('hidden');
  var wb=$('wBoost');
  if(M.boostNext){wb.classList.remove('hidden');$('btnBoost').textContent='BOOST ×2 CRÉDITS ACTIF';$('btnBoost').style.color='#7EF0A8'}
- else if(!M.resume){wb.classList.remove('hidden');$('btnBoost').textContent='BOOST ×2 CRÉDITS — VIDÉO';$('btnBoost').style.color=''}
+ else if(!M.resume){wb.classList.remove('hidden');$('btnBoost').textContent='BOOST ×2 CRÉDITS';$('btnBoost').style.color=''}
  else wb.classList.add('hidden');
  var lr=$('linksRow');lr.innerHTML='';
  var dcl=dirClaimable();
@@ -2326,7 +2327,7 @@ function renderMs(){
    '</div>'+
    '</div>';
  }
- html+='<div style="text-align:center;font:500 11px Rajdhani;color:#57648F;padding:6px 0 2px">Le volet premium s\'ouvrira avec le Pass (achat intégré).</div>';
+ html+='<div style="text-align:center;font:500 11px Rajdhani;color:#57648F;padding:6px 0 2px">Contenu premium indisponible dans cette version de test.</div>';
  $('msList').innerHTML=html;
  var btns=$('msList').querySelectorAll('[data-ms]');
  for(i=0;i<btns.length;i++){
@@ -2929,32 +2930,26 @@ function renderStore(){
  html+='</div>';
  html+='<div class="shopSec cGrn">TRANSMISSION GRATUITE</div>';
  html+='<div class="pRow g"><span class="pt" style="color:var(--mint)">GEMMES OFFERTES</span>'+
-  '<span class="pd">'+ic('gem')+' 20 — par vidéo</span>'+
-  '<button class="price grn" id="stVid"'+(canFree?'':' disabled style="opacity:.4;border-color:var(--line2);color:#7C89B8"')+'>'+ic('vid')+' VIDÉO</button></div>';
- html+='<div class="shopSec cGold">MULTIPLICATEURS PERMANENTS</div>';
+ '<span class="pd">'+ic('gem')+' Récompense quotidienne</span>'+
+ '<button class="price grn" id="stVid"'+(canFree?'':' disabled style="opacity:.4;border-color:var(--line2);color:#7C89B8"')+'>'+ic('gem')+' RÉCLAMER</button></div>';
+ html+='<div class="shopSec cGold">AMÉLIORATIONS</div>';
  html+='<div class="pRow"><span class="pt" style="color:var(--mint)">PACK DÉBUTANT</span>'+
-  '<span class="pd">'+ic('multi')+' ×2 pièces + '+ic('gem')+' 150</span>'+
-  '<button class="price" data-iap>9,99 €</button></div>';
+  '<span class="pd">'+ic('multi')+' ×2 pièces + '+ic('gem')+' 150 — indisponible</span></div>';
  html+='<div class="pRow"><span class="pt" style="color:var(--gem)">PACK ÉPIQUE</span>'+
-  '<span class="pd">'+ic('multi')+' ×3 pièces + '+ic('gem')+' 750</span>'+
-  '<button class="price" data-iap>34,99 €</button></div>';
+  '<span class="pd">'+ic('multi')+' ×3 pièces + '+ic('gem')+' 750 — indisponible</span></div>';
  html+='<div class="pRow"><span class="pt" style="color:#4FE0D8">LIAISON DIRECTE</span>'+
-  '<span class="pd">Sans pubs · ×1,5 pièces</span>'+
-  '<button class="price cyn" data-iap>9,99 €</button></div>';
+  '<span class="pd">Sans pubs · ×1,5 pièces — indisponible</span></div>';
  html+='<div class="shopSec cGem">PACKS DE GEMMES</div><div class="gGrid">';
  for(var i=0;i<GEMPACKS.length;i++){
   (function(p){
-   html+='<button class="gPack'+(p.best?' hi':'')+'" data-gp="'+p.n+'">'+
+   html+='<div class="gPack'+(p.best?' hi':'')+'">'+
     (p.best?'<span class="gbest">BEST VALUE</span>':'')+
     (p.b?'<span class="gb">+'+p.b+'%</span>':'')+
     ic('gemBig')+
     '<span class="gn">× '+fmt(p.n)+'</span>'+
-    '<span class="gp">'+p.p+'</span></button>';
+    '<span class="gp">Indisponible</span></div>';
   })(GEMPACKS[i]);
  }
- html+='<div class="gPack hi"><span class="gn" style="color:#4FE0D8;letter-spacing:1px">OFFERWALL</span>'+
-  '<span style="font:500 11.5px Rajdhani;color:#AEBBE4;text-align:center;line-height:1.4">Offres contre gemmes gratuites</span>'+
-  '<button class="gp" id="stOffer" style="border-color:#4FE0D8;color:#4FE0D8;background:#0A1A1E">Aller voir</button></div>';
  html+='</div>';
  $('storeBody').innerHTML=html;
  var pcs=document.querySelectorAll('[data-pal]');
@@ -2986,19 +2981,6 @@ function renderStore(){
    save();renderStore();updateCur();
   });
  });
- var iaps=document.querySelectorAll('[data-iap]');
- for(i=0;i<iaps.length;i++)iaps[i].addEventListener('click',function(){toast('Achats intégrés : à la publication')});
- var gps=document.querySelectorAll('[data-gp]');
- for(i=0;i<gps.length;i++){
-  (function(x){
-   x.addEventListener('click',function(){
-    var n=+x.getAttribute('data-gp');
-    M.gems+=n;SFX.unlock();toast('+'+fmt(n)+' gemmes (pack test)');
-    save();updateCur();
-   });
-  })(gps[i]);
- }
- $('stOffer').addEventListener('click',function(){toast('Offerwall : à la publication')});
 }
 /* ============ RUN ============ */
 var cv=$('cv'),ctx=cv.getContext('2d');
@@ -3382,16 +3364,7 @@ function updSpeedUI(){
  updSpeedUI()});
 
 /* --- [NEW] interactions in-run : pub, pièces/min, panneau CYCLE --- */
- $('btnAdRun').addEventListener('click',function(){
- if(!R||!R.active)return;
- if(R.time<(R.adNext||600)){SFX.err();return}
- rewardedAd(function(){
-  M.gems+=5;R.runGems+=5;
-  R.adNext=R.time+600;
-  toast('+5 gemmes (transmission)');
-  save();updateCur();
- });
-});
+/* Les publicités récompensées ne sont pas disponibles dans cette version. */
  $('hudRCoin').addEventListener('click',function(){
  if(!R)return;
  R.rateOn=!R.rateOn;
@@ -4710,7 +4683,7 @@ function updateHud(force){
  var wp=R.waveDur>0?clamp(R.waveT/R.waveDur,0,1):0;
  $('waveFill').style.transform='scaleX('+wp+')';
  /* [NEW] pub in-run : visible toutes les 10 min de temps de run */
- $('btnAdRun').classList.toggle('on',R.active&&!R.dead&&R.time>=(R.adNext||600));
+ $('btnAdRun').classList.remove('on');
  /* [NEW] pièces/min (fenêtre glissante 60s) */
  if(R.rateOn){
   var now2=Date.now();
@@ -4956,7 +4929,7 @@ function openSettings(){
    '<button class="obtn segb'+(M.set.tgt==='far'?' on':'')+'" data-t="far">Lointain</button></div></div>'+
   '<button class="obtn" id="sFull">PLEIN ÉCRAN</button>'+
   '<a class="obtn" href="https://king6code.github.io/tower-drive/privacy-policy.html" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">POLITIQUE DE CONFIDENTIALITÉ</a>'+
-  '<button class="obtn dng" id="sReset">RÉINITIALISER LA SAUVEGARDE</button>'+
+  '<button class="obtn dng" id="sReset">RÉINITIALISER LA SAUVEGARDE</button>'+ 
   '<button class="obtn" id="sClose">FERMER</button>';
  if(M.dev.open){
   b.innerHTML+='<div class="devBox"><div class="dt">OUTILS DE TEST</div>'+
