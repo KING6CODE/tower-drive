@@ -5,10 +5,10 @@ android {
     compileSdk 36
     defaultConfig {
         applicationId 'com.king6code.towerdrive'
-        minSdk 23
+        minSdk 24
         targetSdk 36
-        versionCode 1
-        versionName '1.0'
+        versionCode 3
+        versionName '1.1'
     }
     signingConfigs {
         release {
@@ -34,4 +34,7 @@ android {
     }
 }
 
-
+dependencies {
+    implementation 'com.google.android.gms:play-services-ads:25.5.0'
+    implementation 'androidx.core:core:1.13.1'
+}

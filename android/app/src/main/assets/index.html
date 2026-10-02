@@ -462,6 +462,7 @@ button:active{transform:scale(.975)}
      <div class="t">PROTOCOLE DE SIMULATION</div>
      <div class="tSegs" id="tierSegs"></div>
      <div class="recLine">Record : <b id="tierRec">0</b> &nbsp;·&nbsp; Pièces <b id="tierMult">x1</b></div>
+     <div class="recLine" id="tierCond" style="color:var(--red);font-size:.78rem"></div>
      <div class="pbarW"><div class="pbarF" id="goalBar" style="width:0%"></div></div>
     </div>
     <span class="chfW"><button id="btnFight" class="chfB">LANCER LA SIMULATION</button></span>
@@ -820,7 +821,11 @@ var GEM_DAILY=20;
 function defMeta(){return{
  v:20,coins:0,gems:0,cores:0,tier:0,spdIdx:0,runIdx:0,boostNext:false,seenBest:0,
  ws:{},wsU:{},cards:{own:{},eq:[null,null,null,null]},slots:1,
- lab:{lvl:{},cur:null,slots:1,rs:[]},mods:{lv:{atk:0,def:0,eco:0}},
+ lab:{lvl:{},cur:null,slots:1,rs:[]},mods:{lv:{atk:0,def:0,eco:0}},enh:{},
+ cardPresets:{A:null,B:null,C:null}, /* [NEW P3] presets de deck */
+ season:{slot:-1,xp:0,cl:{},prem:false}, /* [NEW P3] saison 8 semaines */
+ event:{slot:-1,prog:{},cl:{},med:0}, /* [NEW P3] événement 2 semaines + médailles */
+ relics:{n:0}, /* [NEW P3] reliques permanentes */
  wpn:{gt:0,dw:0,cl:0,bh:0,ms:0,mines:0,cf:0,ps:0,sl:0},
  prest:{count:0,bonus:0},
  cos:{pal:'amber',own:['amber']},
@@ -834,7 +839,7 @@ function defMeta(){return{
  ach:{c:{}},hist:[],
  cal:{ts:0,st:0},
  dev:{open:false,infCoins:false,infGems:false,infCores:false},
- set:{sfx:true,music:true,tgt:'near',vib:true},
+ set:{sfx:true,music:true,tgt:'near',vib:true,fscale:1,cb:false},
  tutStage:0,atelierGift:0,cardsGift:0,tutSeen:{},
  best:[0,0,0,0,0],daily:{store:0},resume:null,
  st:{runs:0,kills:0,coins:0,waves:0,time:0,boss:0,ups:0,evos:0,wkdm:0,cores:0}
@@ -846,7 +851,7 @@ try{
   var d=JSON.parse(raw),b=defMeta(),k;
   for(k in b)if(!(k in d))d[k]=b[k];
   M=d;
-  ['ws','set','st','daily','wpn','lab','mods','dev','prest','direct','arena','cos','ms','wk','bank','gacha','chain','ach','cal'].forEach(function(key){M[key]=Object.assign({},defMeta()[key],d[key]||{})});
+  ['ws','set','st','daily','wpn','lab','mods','dev','prest','direct','arena','cos','ms','wk','bank','gacha','chain','ach','cal','enh','cardPresets','season','event','relics'].forEach(function(key){M[key]=Object.assign({},defMeta()[key],d[key]||{})});
   if(M.mods.lv)M.mods.lv=Object.assign({atk:0,def:0,eco:0},M.mods.lv);
   if(!Array.isArray(M.direct.sel))M.direct.sel=[];
   if(!Array.isArray(M.cos.own)||!M.cos.own.length)M.cos.own=['amber'];
@@ -867,9 +872,11 @@ try{
    if(!own2[nk])own2[nk]={c:nc,l:nl};
    else{own2[nk].l=Math.max(own2[nk].l,nl);own2[nk].c=Math.max(own2[nk].c,nc)}
   }
-  M.cards={own:own2,eq:Array.isArray(d.cards&&d.cards.eq)?d.cards.eq.slice(0,4):[null,null,null,null]};
-  while(M.cards.eq.length<4)M.cards.eq.push(null);
-  if(!Array.isArray(M.best)||M.best.length!==5)M.best=[0,0,0,0,0];
+  if(typeof M.slots!=='number'||isNaN(M.slots)||M.slots<1)M.slots=4;M.slots=Math.min(22,Math.round(M.slots)); /* [FIX] normalisation slots */
+  M.cards={own:own2,eq:Array.isArray(d.cards&&d.cards.eq)?d.cards.eq.slice(0,M.slots):[]};
+  /* [FIX] eq dimensionné sur les slots réellement débloqués (avant: troncature à 4 → slots 5+ morts) */
+  while(M.cards.eq.length<M.slots)M.cards.eq.push(null);
+  if(!Array.isArray(M.best))M.best=[];while(M.best.length<12)M.best.push(0);M.best.length=12; /* [NEW P2] 12 paliers */
  }
 }catch(e){}
 function normalizeCards(){
@@ -882,9 +889,26 @@ function normalizeCards(){
  }
  if(fixed)save();
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify(M))}catch(e){}}
-window.addEventListener('pagehide',save);
-window.addEventListener('beforeunload',save);
+/* [FIX] sauvegarde débondée (avant: stringify de tout M à chaque achat) + flush quand l'app passe en fond */
+var _saveT=null,_noSave=false;
+function saveNow(){if(_saveT){clearTimeout(_saveT);_saveT=null}if(_noSave)return;try{localStorage.setItem(KEY,JSON.stringify(M))}catch(e){}}
+function save(){if(_noSave)return;if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(function(){_saveT=null;saveNow()},900)}
+window.addEventListener('pagehide',saveNow);
+window.addEventListener('beforeunload',saveNow);
+/* [NEW P3] notification native : prochaine recherche de labo terminée */
+function syncLabNotify(){
+ try{
+  if(!window.NativeAds||!NativeAds.notifyLab)return;
+  var rs=M.lab.rs||[],best=null,i;
+  for(i=0;i<rs.length;i++)if(rs[i].end>Date.now()&&(!best||rs[i].end<best.end))best=rs[i];
+  if(best){
+   var def=null;
+   for(i=0;i<LABS.length;i++)if(LABS[i].id===best.id)def=LABS[i];
+   NativeAds.notifyLab('Tower Drive','Recherche terminée : '+(def?def.n:'amélioration'),best.end);
+  }else if(NativeAds.cancelLab)NativeAds.cancelLab();
+ }catch(e){}
+}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'){saveNow();syncLabNotify()}});
 
 /* ============ musique ============ */
 var Music=(function(){
@@ -1271,8 +1295,9 @@ var DIRDEF=[
  {id:'coins',icn:'coin',txt:function(n){return 'Gagner '+n+' pièces au total'},goal:150}
 ];
 function todayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()}
+function slot8Key(){return 's'+Math.floor(Date.now()/(8*3600*1000))} /* [NEW P3] missions toutes les 8 h */
 function ensureDirect(){
- var tk=todayKey();
+ var tk=slot8Key();
  if(M.direct.date!==tk){
   var seed=0,i;
   for(i=0;i<tk.length;i++)seed=(seed*31+tk.charCodeAt(i))>>>0;
@@ -1295,10 +1320,33 @@ function dirMission(id){
  }
  return null;
 }
+/* [NEW P3] événement 2 semaines : médailles, missions, boutique, reliques */
+var EVNAMES=['ASSAUT CARAPACE','TEMPÊTE IONIQUE','SIÈGE CRIMSON','MARÉE VAMPIRE','BOMBARDEMENT ORBITAL','INVASION SPECTRALE','RIPOSTE BLINDÉE','NUIT DORÉE'];
+var EVRELICS=[['ÉCLAT DU VIDE','+4% dégâts permanents'],['CŒUR DE SUPERNOVA','+4% intégrité permanente'],['FRAGMENT ANCIEN','+3% pièces permanentes']];
+var EV_MED=[10,25,60];
+function evSlot(){return Math.floor(Date.now()/(14*86400000))}
+function evEnsure(){var s=evSlot();if(M.event.slot!==s){M.event={slot:s,prog:{},cl:{},med:M.event.med||0};save()}}
+function evUnlocked(){return bestAny()>=70}
+function evGoal(kind,t){var b={kills:2000,wave:40,runs:6,ups:80,ad:8,coins:15000,boss:10,gold:5}[kind]||10;return Math.round(b*Math.pow(4,t))}
+function evKinds(){var k=['kills','wave','runs','ups','ad','coins','boss','gold'],o=evSlot()%k.length,i,out=[];for(i=0;i<k.length;i++)out.push(k[(o+i)%k.length]);return out}
+function evProg(kind,amt){
+ if(['kills','wave','runs','ups','ad','coins','boss','gold'].indexOf(kind)<0)return;
+ evEnsure();
+ if(M.event.prog[kind]===undefined)M.event.prog[kind]=0;
+ M.event.prog[kind]+=amt;
+ save();
+}
+function relicB(){return M.relics.n||0}
+/* [NEW P3] saison 8 semaines : XP par vagues, piste premium en gemmes */
+function seasonSlot(){return Math.floor(Date.now()/(56*86400000))}
+function seasonEnsure(){var s=seasonSlot();if(M.season.slot!==s){M.season={slot:s,xp:0,cl:{},prem:false};save()}}
+function seasonStepReq(idx){return 500*(idx+1)}
 function dirProg(id,amt){
  var m=dirMission(id);
- if(!m||M.direct.claimed[id])return;
- M.direct.prog[id]=Math.min(m.goal,(M.direct.prog[id]||0)+amt);
+ if(m&&!M.direct.claimed[id]){
+  M.direct.prog[id]=Math.min(m.goal,(M.direct.prog[id]||0)+amt);
+ }
+ evProg(id,amt); /* [NEW P3] alimente aussi les missions d'événement */
  save();
 }
 function dirMax(id,val){
@@ -1325,6 +1373,23 @@ function dirClaimable(){
 /* ============ pub récompensée ============ */
 var AD_DUR=3,AD_C=263.9;
 function rewardedAd(cb){
+ /* [NEW] pub récompensée AdMob native via bridge NativeAds (fallback: écran simulé) */
+ try{
+  if(window.NativeAds&&NativeAds.isReady&&String(NativeAds.isReady())==='true'){
+   var arcN=$('adArc'),cntN=$('adCount');
+   arcN.style.strokeDashoffset='0';cntN.textContent='•••';
+   $('ovAd').classList.add('on');
+   var watchdog=setTimeout(function(){if(window.__adDone)window.__adDone(false)},90000);
+   window.__adDone=function(ok){
+    window.__adDone=null;clearTimeout(watchdog);
+    $('ovAd').classList.remove('on');
+    if(ok){SFX.unlock();dirProg('ad',1);cb()}
+    else toast('Récompense non obtenue');
+   };
+   NativeAds.showRewarded();
+   return;
+  }
+ }catch(e){}
  var t0=null,lastTick=AD_DUR+1;
  var arc=$('adArc'),cnt=$('adCount');
  arc.style.strokeDashoffset='0';
@@ -1403,8 +1468,20 @@ var SOLIDS={};
 /* ============ équilibrage ennemis [WIKI] ============ */
 var EN_ATK_BASE=1.18,EN_ATK_G=1.178;
 var EN_HP_BASE=2.35,EN_HP_G=1.22;
-var TIER_MULT=[1,20,60,115,230];
-var TIER_COIN=[1,5,25,125,625];
+/* [NEW P2] paliers étendus P1→P12 : mult ennemis ×2 par nouveau palier, pièces ×3 */
+var TIER_MULT=[1,20,60,115,230,460,920,1840,3680,7360,14720,29440];
+var TIER_COIN=[1,5,25,125,625,1875,5625,16875,50625,151875,455625,1366875];
+var NT=12;
+/* [NEW P2] battle conditions statiques par palier (style The Tower) — dès P8 */
+var BCOND=[null,null,null,null,null,null,null,
+ {n:'BOSS RAPPROCHÉS',d:'Un Gardien toutes les 9 vagues',boss:9},
+ {n:'HORDES',d:'+25% d\'ennemis par vague',cnt:1.25},
+ {n:'CUIRASSÉS',d:'Ennemis +60% PV',hp:1.6},
+ {n:'PRESSION',d:'+35% vitesse et +25% ATK ennemies',spd:1.35,atk:1.25},
+ {n:'MASSE CRITIQUE',d:'Gardien/8 vagues, +35% ennemis, +80% PV, +45% vitesse, +40% ATK',boss:8,cnt:1.35,hp:1.8,spd:1.45,atk:1.4}
+];
+function bcMul(t,k){var b=BCOND[t];return b&&b[k]?b[k]:1}
+function bcBoss(t){var b=BCOND[t];return b&&b.boss?b.boss:10}
 /* [WIKI] Enemy Level Skip = probabilité par vague (0,05 % → 35 %) */
 function skipPtsA(){var v=wsNum('eaS');if(R)v+=runAdd('eaS',R.ups.eaS||0);return v}
 function skipPtsH(){var v=wsNum('ehS');if(R)v+=runAdd('ehS',R.ups.ehS||0);return v}
@@ -1412,13 +1489,13 @@ function enAtk(w,t){
  var sk=Math.floor(w*clamp(skipPtsA(),0,35)/100);
  if(R&&R.overheat)sk*=.5;
  var we=Math.max(1,w-Math.round(sk));
- return EN_ATK_BASE*Math.pow(EN_ATK_G,we-1)*TIER_MULT[t];
+ return EN_ATK_BASE*Math.pow(EN_ATK_G,we-1)*TIER_MULT[t]*bcMul(t,'atk'); /* [NEW P2] battle condition */
 }
 function enHp(w,t){
  var sk=Math.floor(w*clamp(skipPtsH(),0,35)/100);
  if(R&&R.overheat)sk*=.5;
  var we=Math.max(1,w-Math.round(sk));
- return EN_HP_BASE*Math.pow(EN_HP_G,we-1)*TIER_MULT[t];
+ return EN_HP_BASE*Math.pow(EN_HP_G,we-1)*TIER_MULT[t]*bcMul(t,'hp'); /* [NEW P2] battle condition */
 }
 function enemyCash(w){
  if(w<=200)return 1+Math.floor(w/10);
@@ -1472,7 +1549,7 @@ var UDEF=[
  {id:'kbC',cat:1,n:'Chance de recul',b:0,cap:80,lk:'ls'},
  {id:'kbF',cat:1,n:'Force du recul',b:.4,cap:40,lk:'kbC'},
  {id:'orbS',cat:1,n:'Vitesse des orbes',b:.4,cap:38,lk:'kbF'},
- {id:'orbN',cat:1,n:'Orbes',b:1,cap:4,lk:'orbS'},
+ {id:'orbN',cat:1,n:'Orbes',b:0,cap:4,lk:'orbS'},/* [FIX] pas d'orbe de départ (avant: b:1 → sphère présente dès le début) */
  {id:'swS',cat:1,n:'Taille onde de choc',b:.6,cap:35,lk:'orbN'},
  {id:'swF',cat:1,n:'Fréq. onde de choc',b:0,cap:23,lk:'swS'},
  {id:'lmC',cat:1,n:'Chance de mine',b:0,cap:50,lk:'swF'},
@@ -1801,6 +1878,27 @@ var LABS=[
  {id:'cash',n:'Crédits',per:.02,d:60,c:300},{id:'coin',n:'Pièces',per:.02,d:90,c:500},
  {id:'aspd',n:'Cadence',per:.01,d:180,c:1000},{id:'crit',n:'Critique',per:.01,d:300,c:1500}
 ];
+/* [NEW P2] Workshop Enhancements — couche endgame (style The Tower), déblocage P10 */
+var ENHDEF=[
+ {id:'dmgE',n:'Dégâts +',mx:100,per:.02},
+ {id:'critfE',n:'Facteur critique +',mx:100,per:.02,req:'dmgE',rl:25},
+ {id:'aspdE',n:'Cadence +',mx:60,per:.01,req:'critfE',rl:25},
+ {id:'hpE',n:'Intégrité +',mx:100,per:.02},
+ {id:'regenE',n:'Régénération +',mx:100,per:.02,req:'hpE',rl:25},
+ {id:'defAE',n:'Blindage absolu +',mx:100,per:.02,req:'regenE',rl:25},
+ {id:'cashE',n:'Crédits +',mx:100,per:.02},
+ {id:'coinE',n:'Pièces +',mx:100,per:.02,req:'cashE',rl:25},
+ {id:'freeE',n:'Améliorations gratuites +',mx:50,per:.01,req:'coinE',rl:25}
+];
+function enhUnlocked(){return tiersUnlocked()>=10}
+function enhL(id){return M.enh[id]||0}
+function enhPer(id){var e=null,i;for(i=0;i<ENHDEF.length;i++)if(ENHDEF[i].id===id)e=ENHDEF[i];return e?e.per:.02}
+function enhMul(id){return 1+enhL(id)*enhPer(id)}
+function enhCost(l){return Math.ceil(2e9*Math.pow(1.32,l))} /* L1 = 2 Md pièces */
+/* [NEW P2] UW+ : éveil des armes ★5→★8 en gemmes */
+function uwPlusCost(lv){return 400*Math.pow(2,lv-4)}
+function uwPlus(id){var l=wlv(id);return l>4?1+.3*(l-4):1}
+function uwPlusAll(){var m=1,i;for(i=0;i<WPN.length;i++)m*=uwPlus(WPN[i].id);return m}
 var UW_COST=[5,50,150,300,800,1250,1750,2400,3000];
 var WPN=[
  {id:'gt',n:'Surtension',act:1,base:120,d0:'10s : dégâts ×8, pièces ×3.'},
@@ -1827,7 +1925,7 @@ var MODDEF=[
 
 function cardB(){
  var b={dmgM:1,aspdM:1,hpM:1,regenM:1,rangeM:1,cashM:1,coinM:1,slow:0,critA:0,defA:0,ebal:1,freeP:0,ccoP:0,wskipP:0,stwM:1,swndT:0,waccP:0,bersP:0,eshN:0};
- for(var i=0;i<4;i++){
+ for(var i=0;i<M.cards.eq.length;i++){ /* [FIX] bonus sur tous les slots équipés (avant: figé à 4) */
   var id=M.cards.eq[i];if(!id)continue;
   var def=cardDef(id);if(!def)continue;
   var lv=cardLv(id);if(lv<1)continue;
@@ -1853,14 +1951,14 @@ function stats(){
  function UA(id){return R?runAdd(id,R.ups[id]||0):0}
  function N(id){return wsNum(id)+UA(id)}
  return{
-  dmg:(N('dmg'))*(1+(lb.dmg||0)+(cb.dmgM-1))*(1+mb.dmg)*(1+.01*pb)*cb.dmgM,
-  aspd:(N('aspd'))*(1+(lb.aspd||0)+(cb.aspdM-1))*cb.aspdM,
+  dmg:(N('dmg'))*(1+(lb.dmg||0)+(cb.dmgM-1))*(1+mb.dmg)*(1+.01*pb)*cb.dmgM*enhMul('dmgE')*(1+.04*relicB()),
+  aspd:(N('aspd'))*(1+(lb.aspd||0)+(cb.aspdM-1))*cb.aspdM*enhMul('aspdE'),
   critc:Math.min(.8,N('critc')+(lb.crit||0)+cb.critA),
-  critf:N('critf'),
+  critf:N('critf')*enhMul('critfE'),
   range:N('range')*cb.rangeM,
   hp:N('hp'),
-  maxhp:(N('hp'))*(1+(lb.hp||0)+(cb.hpM-1))*(1+mb.hp)*(1+.01*pb)*cb.hpM,
-  regen:N('regen')*cb.regenM,
+  maxhp:(N('hp'))*(1+(lb.hp||0)+(cb.hpM-1))*(1+mb.hp)*(1+.01*pb)*cb.hpM*enhMul('hpE')*(1+.04*relicB()),
+  regen:N('regen')*cb.regenM*enhMul('regenE'),
   def:Math.min(.75,N('def')+cb.defA),
   thorns:N('thorns'),
   dpm:N('dpm'),
@@ -1869,7 +1967,7 @@ function stats(){
   bsC:N('bsC'),bsT:Math.round(N('bsT')),bsR:N('bsR'),
   scC:N('scC'),scM:N('scM'),
   raC:N('raC'),raM:N('raM'),
-  defA:N('defA'),
+  defA:N('defA')*enhMul('defAE'),
   ls:N('ls'),
   kbC:N('kbC'),kbF:N('kbF'),
   orbS:N('orbS'),orbN:Math.round(N('orbN')),
@@ -1877,12 +1975,12 @@ function stats(){
   lmC:N('lmC'),lmD:N('lmD'),lmR:N('lmR'),
   dd:N('dd'),
   wH:N('wH'),wR:N('wR'),
-  cashb:N('cashb')+(lb.cash||0),
+  cashb:N('cashb')+(lb.cash||0)+enhL('cashE')*.02,
   cashw:N('cashw'),
   ckl:N('ckl'),
   coinw:N('coinw'),
-  coinb:N('coinb'),
-  freeA:N('freeA'),freeD:N('freeD'),freeU:N('freeU'),
+  coinb:N('coinb')+enhL('coinE')*.02+.03*relicB(),
+  freeA:N('freeA')*enhMul('freeE'),freeD:N('freeD')*enhMul('freeE'),freeU:N('freeU')*enhMul('freeE'),
   intw:N('intw'),
   recA:N('recA'),
   recM:N('recM'),
@@ -2012,8 +2110,8 @@ function updateGuide(){
 setInterval(function(){if(screen==='battle')updateGuide()},700);
 
 /* ============ accueil ============ */
-var selTier=clamp(M.tier||0,0,4);
-function tiersUnlocked(){var n=1,i;for(i=0;i<4;i++)if(M.best[i]>=100)n=i+2;return Math.min(5,n)}
+var selTier=clamp(M.tier||0,0,11);
+function tiersUnlocked(){var n=1,i;for(i=0;i<NT-1;i++){if(M.best[i]>=(i>=9?200:100))n=i+2;else break}return Math.min(NT,n)} /* [NEW P2] P11-P12 exigent le cycle 200 */
 function renderBattle(){
  ensureDirect();
  ensureArenaWeek();
@@ -2022,14 +2120,14 @@ function renderBattle(){
  hh.setAttribute('stroke',pal().c);
  hh.style.filter='drop-shadow(0 0 8px '+hxa(pal().c,.8)+')';
  var seg=$('tierSegs');seg.innerHTML='';
- for(var t=0;t<5;t++){
+ for(var t=0;t<NT;t++){
   (function(t){
    var un=t<tiersUnlocked();
    var b=document.createElement('button');
    b.className='tSeg'+(t===selTier?' sel':'')+(un?'':' off');
    b.textContent='P'+(t+1);
    b.addEventListener('click',function(){
-    if(!un){SFX.err();toast('Terminez le cycle 100 du protocole '+t+' pour débloquer');return}
+    if(!un){SFX.err();toast('Terminez le cycle '+(t>=9?200:100)+' du protocole P'+(t+1)+' pour débloquer');return}
     selTier=t;renderBattle();SFX.buy();
    });
    seg.appendChild(b);
@@ -2037,6 +2135,9 @@ function renderBattle(){
  }
  $('tierRec').textContent=M.best[selTier]||0;
  $('tierMult').textContent='x'+fdec(TIER_COIN[selTier]*(1+stats().coinb),2);
+ var bc0=BCOND[selTier]; /* [NEW P2] affichage battle condition */
+ $('tierCond').textContent=bc0?'⚠ '+bc0.n+' — '+bc0.d:'';
+ $('tierCond').style.display=bc0?'':'none';
  var b0=bestAny(),ng=nextGoalFor(b0);
  var gb=$('goalBar');
  gb.style.width=Math.min(100,Math.round(b0/ng[0]*100))+'%';
@@ -2113,6 +2214,10 @@ function renderBattle(){
  });
 });
  $('btnResume').addEventListener('click',function(){if(M.resume)startRun(M.resume.tier,M.resume,false)});
+$('btnAdRun').addEventListener('click',function(){ /* [FIX] bouton pub in-run enfin branché */
+ if(!R||!R.active||R.arena||R.time<R.adNext)return;
+ rewardedAd(function(){M.gems+=2;R.runGems+=2;R.adNext=R.time+600;toast('+2 gemmes');save();updateCur()});
+});
  $('btnPodium').addEventListener('click',openPodium);
  $('btnGear').addEventListener('click',openSettings);
 (function(){
@@ -2211,21 +2316,111 @@ function renderArena(){
 /* ============ événements ============ */
 function renderEvent(){
  var b=$('eventBody');
- if(!eventUnlocked()){
+ if(!evUnlocked()){
   b.innerHTML='<div class="bigLock">'+ic('lock')+'<span>ÉVÉNEMENTS VERROUILLÉS<br><small style="color:#57648F">Atteignez la vague 70 (record)</small></span></div>';
   return;
  }
- var wk=isWeekend();
+ evEnsure();
+ var kinds=evKinds(),slotN=M.event.slot;
+ var left=(slotN+1)*14*86400000-Date.now(),days=Math.max(0,Math.ceil(left/86400000));
+ var name=EVNAMES[slotN%EVNAMES.length];
  var html='<div class="aHead">'+
-  '<div style="font:600 11px Rajdhani;letter-spacing:3px;color:#7C89B8">ÉVÉNEMENT</div>'+
-  '<div class="aName" style="color:'+(wk?'var(--gold)':'#7C89B8')+'">'+(wk?'PLUIE DORÉE — ACTIF':'PLUIE DORÉE')+'</div>'+
-  '<div class="aSub">'+(wk?'Le week-end est actif !':'Le week-end prochain :')+'</div></div>';
- html+='<div class="aInfo"><div class="t">BONUS DU WEEK-END</div>'+
-  '<div class="d">Pièces ×2 pendant les simulations<br>Ennemis dorés ×3 (chaque doré = +1 gemme)</div></div>';
- if(wk)html+='<span class="chfW grn"><button id="btnEvGo" class="chfB">EVENT ACTIF — ALLER AU COMBAT</button></span>';
+  '<div style="font:600 11px Rajdhani;letter-spacing:3px;color:#7C89B8">ÉVÉNEMENT — '+(days>0?days+' JOURS RESTANTS':'DERNIÈRES HEURES')+'</div>'+
+  '<div class="aName" style="color:var(--gold)">'+name+'</div>'+
+  '<div class="aSub">Médailles : <b style="color:var(--gold)">'+fmt(M.event.med||0)+'</b> · fin dans '+days+' j</div></div>';
+ html+='<div class="aInfo"><div class="t">MISSIONS D\'ÉVÉNEMENT</div>'+
+  '<div class="d">Chaque palier rapporte des médailles : '+EV_MED.join(' / ')+'. Les médailles servent à la boutique ci-dessous.</div></div>';
+ var i;
+ for(i=0;i<kinds.length;i++){
+  (function(kind){
+   var t=0;
+   while(t<3&&M.event.cl[kind+t])t++; /* prochain palier non réclamé */
+   var allDone=t>=3;
+   var goal=evGoal(kind,Math.min(t,2));
+   var prog=Math.min(M.event.prog[kind]||0,allDone?goal:goal);
+   var pct=Math.min(100,Math.round((M.event.prog[kind]||0)/goal*100));
+   var txt={kills:'Neutraliser hostiles',wave:'Atteindre le cycle',runs:'Lancer des simulations',ups:'Acheter des modules',ad:'Transmissions bonus',coins:'Gagner des pièces',boss:'Vaincre des Gardiens',gold:'Claim des ennemis dorés'}[kind];
+   html+='<div class="dRow"><span class="dc">'+
+    '<span class="dt">'+txt+' <span style="color:#7C89B8;font-size:11px">· Palier '+Math.min(t+1,3)+'/3</span></span>'+
+    '<span class="dbar"><span class="dbf" style="width:'+pct+'%"></span><span class="dpr">'+fmt(Math.min(M.event.prog[kind]||0,goal))+' / '+fmt(goal)+'</span></span></span>'+
+    '<span class="dcl"><span class="drw">+'+EV_MED[Math.min(t,2)]+' <b style="color:var(--gold)">MÉD</b></span>'+
+    (allDone?'<button class="claimB ok" disabled>COMPLET</button>'
+     :((M.event.prog[kind]||0)>=goal?'<button class="claimB" data-ev="'+kind+'">RÉCLAMER</button>':'<button class="claimB" disabled>EN COURS</button>'))+
+    '</span></div>';
+  })(kinds[i]);
+ }
+ html+='<div class="aInfo" style="margin-top:8px"><div class="t">BOUTIQUE D\'ÉVÉNEMENT</div>'+
+  '<div class="d">Dépense tes médailles avant la fin de l\'événement (elles sont conservées).</div></div>';
+ var shop=[
+  {k:'g10',n:'10 gemmes',c:20,ic:'gem'},
+  {k:'g30',n:'30 gemmes',c:55,ic:'gem'},
+  {k:'c',n:'Pack de pièces (×2 quotidien)',c:40,ic:'coin'},
+  {k:'k5',n:'5 noyaux d\'éveil',c:150,ic:'core'}
+ ];
+ for(i=0;i<shop.length;i++){
+  (function(s2){
+   html+='<div class="dRow"><span class="dc"><span class="dt">'+s2.n+'</span></span>'+
+    '<span class="dcl"><span class="drw">'+s2.c+' MÉD</span><button class="claimB" data-shop="'+s2.k+'">ACHETER</button></span></div>';
+  })(shop[i]);
+ }
+ for(i=0;i<EVRELICS.length;i++){
+  (function(r,j){
+   var cost=[120,240,400][j],owned=!!M.event.cl['rel'+j];
+   html+='<div class="dRow" style="border-left-color:var(--gem)"><span class="dc">'+
+    '<span class="dt">'+r[0]+' <span style="color:#7C89B8;font-size:11px">· '+r[1]+'</span></span></span>'+
+    '<span class="dcl"><span class="drw">'+cost+' MÉD</span>'+
+    (owned?'<button class="claimB ok" disabled>OBTENUE</button>':'<button class="claimB" data-rel="'+j+'">RÉLIQUE</button>')+
+    '</span></div>';
+  })(EVRELICS[i],i);
+ }
+ if(relicB()>0)html+='<div style="text-align:center;font:600 12px Rajdhani;color:var(--gem);padding:4px">RELIQUES ACTIVES : '+relicB()+' (+'+relicB()*4+'% dégâts, +'+relicB()*4+'% intégrité, +'+relicB()*3+'% pièces)</div>';
+ html+='<div class="aInfo" style="margin-top:8px"><div class="t">BONUS WEEK-END (permanent)</div>'+
+  '<div class="d">Pièces ×2 le week-end · Ennemis dorés ×3 (chaque doré = +1 gemme)</div></div>';
+ b.style.cssText='flex:1;overflow-y:auto;min-height:0;padding:0 8px';
  b.innerHTML=html;
- var g=$('btnEvGo');
- if(g)g.addEventListener('click',function(){showScreen('battle')});
+ var btns=b.querySelectorAll('[data-ev]');
+ for(i=0;i<btns.length;i++){
+  (function(x){
+   x.addEventListener('click',function(){
+    var kind=x.getAttribute('data-ev'),t=0;
+    while(t<3&&M.event.cl[kind+t])t++;
+    if(t>=3||(M.event.prog[kind]||0)<evGoal(kind,t))return;
+    M.event.cl[kind+t]=1;
+    M.event.med=(M.event.med||0)+EV_MED[t];
+    SFX.unlock();toast('+'+EV_MED[t]+' médailles !');
+    save();renderEvent();updateCur();
+   });
+  })(btns[i]);
+ }
+ btns=b.querySelectorAll('[data-shop]');
+ for(i=0;i<btns.length;i++){
+  (function(x){
+   x.addEventListener('click',function(){
+    var k=x.getAttribute('data-shop');
+    var item={g10:{c:20,g:10},g30:{c:55,g:30},c:{c:40},k5:{c:150,k:5}}[k];
+    if((M.event.med||0)<item.c){SFX.err();toast('Pas assez de médailles');return}
+    M.event.med-=item.c;
+    if(item.g){M.gems+=item.g;toast('+'+item.g+' gemmes')}
+    else if(item.k){addCores(item.k);toast('+'+item.k+' noyaux')}
+    else{var rw=dmCoinReward()*2;M.coins+=rw;toast('+'+fmt(rw)+' pièces')}
+    SFX.unlock();save();renderEvent();updateCur();
+   });
+  })(btns[i]);
+ }
+ btns=b.querySelectorAll('[data-rel]');
+ for(i=0;i<btns.length;i++){
+  (function(x){
+   x.addEventListener('click',function(){
+    var j=+x.getAttribute('data-rel'),cost=[120,240,400][j];
+    if((M.event.med||0)<cost){SFX.err();toast('Pas assez de médailles');return}
+    M.event.med-=cost;
+    M.event.cl['rel'+j]=1;
+    M.relics.n=relicB()+1;
+    SFX.unlock();toast(EVRELICS[j][0]+' obtenue — '+EVRELICS[j][1]);
+    save();renderEvent();updateCur();
+   });
+  })(btns[i]);
+ }
 }
 
 /* ============ directives ============ */
@@ -2285,6 +2480,7 @@ function renderDirect(){
      M.coins+=coinRw;M.gems+=3;
      M.chain[def.id]=(M.chain[def.id]||0)+1;
      M.wk.dm++;M.st.wkdm++;
+     M.season.xp+=40; /* [NEW P3] XP de saison */
      SFX.unlock();toast('Directive accomplie : +'+fmt(coinRw)+' pièces, +3 gemmes');
      save();renderDirect();updateCur();
     });
@@ -2302,18 +2498,26 @@ function msFree(idx){
 }
 function msPrem(idx){var f=msFree(idx);return{t:f.t,v:f.v*2}}
 function renderMs(){
- selTier=clamp(selTier,0,4);
+ selTier=clamp(selTier,0,11);
  M.ms.tier=selTier;
+ seasonEnsure(); /* [NEW P3] */
  $('msTier').textContent='PROTOCOLE '+(selTier+1);
  $('msDown').disabled=selTier===0;
  $('msUp').disabled=selTier>=tiersUnlocked()-1;
  var best=M.best[selTier]||0;
- var html='',n,idx,i;
+ var sxp=M.season.xp,prem=M.season.prem;
+ var sLeft=Math.max(0,Math.ceil(((M.season.slot+1)*56*86400000-Date.now())/86400000));
+ var html='<div class="aHead" style="margin-bottom:6px">'+
+  '<div style="font:600 11px Rajdhani;letter-spacing:3px;color:#7C89B8">SAISON '+(M.season.slot+1)+' — '+sLeft+' JOURS</div>'+
+  '<div class="aName" style="color:var(--mint)">XP SAISON : '+fmt(sxp)+'</div>'+
+  '<div class="aSub">'+(prem?'PASS SAISON ACTIF':'Piste premium : '+fmt(500)+' gemmes')+'</div></div>';
+ var n,idx,i;
  for(idx=0;idx<20;idx++){
   n=(idx+1)*5;
   var hit=best>=n;
   var f=msFree(idx),p=msPrem(idx);
   var fClaimed=M.ms.c[selTier+'_'+n];
+  var pHit=sxp>=seasonStepReq(idx),pClaimed=!!M.season.cl['s'+idx];
   function rw(r){
    return r.t==='coin'?('<span class="mv">'+fmt(r.v)+' '+ic('coin')+'</span>'):('<span class="mv">'+fmt(r.v)+' '+ic('gem')+'</span>');
   }
@@ -2322,24 +2526,46 @@ function renderMs(){
     (fClaimed?'<span class="lk2">REÇU</span>':hit?'<button class="cl" data-ms="f_'+n+'">RÉCLAMER</button>':'<span class="lk2">'+ic('slock')+'</span>')+
    '</div>'+
    '<span class="msWave'+(hit?' hit':'')+'">'+n+'</span>'+
-   '<div class="msSide prem">'+rw(p)+
-    '<span class="lk2">'+ic('lock')+' PREMIUM</span>'+
+   '<div class="msSide prem'+(pHit&&!pClaimed?'':' got')+'">'+rw(p)+
+    (pClaimed?'<span class="lk2">REÇU</span>'
+     :(!prem?'<span class="lk2">'+ic('lock')+' PASS</span>'
+      :pHit?'<button class="cl" data-ms="p_'+idx+'">RÉCLAMER</button>'
+      :'<span class="lk2">'+fmt(seasonStepReq(idx))+' XP</span>'))+
    '</div>'+
    '</div>';
  }
- html+='<div style="text-align:center;font:500 11px Rajdhani;color:#57648F;padding:6px 0 2px">Contenu premium indisponible dans cette version de test.</div>';
+ html+='<div style="text-align:center;font:500 11px Rajdhani;color:#57648F;padding:6px 0 2px">XP de saison : chaque vague terminée = +1 XP, chaque directive quotidienne = +40 XP.</div>'+
+  (prem?'':'<div style="text-align:center;padding:4px 0 8px"><button class="claimB" id="btnSeasonPass">DÉBLOQUER LE PASS — '+fmt(500)+' '+ic('gem')+'</button></div>');
  $('msList').innerHTML=html;
+ var bp=$('btnSeasonPass');
+ if(bp)bp.addEventListener('click',function(){
+  if(!canPay('gem',500)){SFX.err();toast('Pas assez de gemmes');return}
+  pay('gem',500);M.season.prem=true;
+  SFX.unlock();toast('PASS SAISON activé ! Piste premium débloquée');
+  save();renderMs();updateCur();
+ });
  var btns=$('msList').querySelectorAll('[data-ms]');
  for(i=0;i<btns.length;i++){
   (function(x){
    x.addEventListener('click',function(){
-    var n2=+x.getAttribute('data-ms').split('_')[1];
-    var idx2=n2/5-1;
-    var r=msFree(idx2);
-    M.ms.c[selTier+'_'+n2]=1;
-    if(r.t==='coin'){M.coins+=r.v;toast('Étape '+n2+' : +'+fmt(r.v)+' pièces')}
-    else{M.gems+=r.v;toast('Étape '+n2+' : +'+fmt(r.v)+' gemmes')}
-    SFX.unlock();save();renderMs();updateCur();
+    var parts=x.getAttribute('data-ms').split('_');
+    if(parts[0]==='f'){
+     var n2=+parts[1];
+     var idx2=n2/5-1;
+     var r=msFree(idx2);
+     M.ms.c[selTier+'_'+n2]=1;
+     if(r.t==='coin'){M.coins+=r.v;toast('Étape '+n2+' : +'+fmt(r.v)+' pièces')}
+     else{M.gems+=r.v;toast('Étape '+n2+' : +'+fmt(r.v)+' gemmes')}
+     SFX.unlock();save();renderMs();updateCur();
+    }else{ /* [NEW P3] piste premium de saison */
+     var idx3=+parts[1];
+     if(!M.season.prem||M.season.cl['s'+idx3]||M.season.xp<seasonStepReq(idx3))return;
+     var r3=msPrem(idx3);
+     M.season.cl['s'+idx3]=1;
+     if(r3.t==='coin'){M.coins+=r3.v;toast('Saison : +'+fmt(r3.v)+' pièces')}
+     else{M.gems+=r3.v;toast('Saison : +'+fmt(r3.v)+' gemmes')}
+     SFX.unlock();save();renderMs();updateCur();
+    }
    });
   })(btns[i]);
  }
@@ -2474,11 +2700,12 @@ function renderCores(g){
    var b=document.createElement('button');
    b.className='upbtn';b.style.textAlign='left';
    var pips='',j;
-   for(j=1;j<=4;j++)pips+='<span class="pip'+(j<=lv?' on':'')+'"></span>';
+   for(j=1;j<=8;j++)pips+='<span class="pip'+(j<=lv?' on':'')+'"></span>'; /* [NEW P2] ★8 */
    var right,upg=false;
    if(lv===0)right=fmt(cost)+' '+ic('core');
    else if(lv<4){upg=true;right='PALIER '+(lv+1)+' · '+fmt(cost*(lv+1)*2)+' '+ic('core')}
-   else right='MAX ★4';
+   else if(lv<8){upg=true;right='ÉVEIL ★'+(lv+1)+' · '+fmt(uwPlusCost(lv))+' '+ic('gem')} /* [NEW P2] UW+ */
+   else right='MAX ★8';
    b.innerHTML='<span style="width:32px;flex:none"><svg width="28" height="28" viewBox="0 0 24 24">'+WGL[d.id]+'</svg></span>'+
     '<span class="lc"><span class="nm">'+d.n+(d.act?'':' <span style="font-size:10px;color:#7C89B8">(passif)</span>')+'</span>'+
     '<span style="font:500 11px Rajdhani;color:#AEBBE4">'+d.d0+'</span><span class="pips">'+pips+'</span></span>'+
@@ -2495,17 +2722,72 @@ function renderCores(g){
     });
    }else if(upg){
     b.addEventListener('click',function(){
-     var c=cost*(lv+1)*2;
-     if(!canPay('core',c)){SFX.err();flash(b,'no');toast('Pas assez de noyaux');return}
-     pay('core',c);
-     M.wpn[d.id]=lv+1;
-     SFX.unlock();
-     toast(d.n+' — palier '+(lv+1)+' !');
-     save();renderCores(g);updateCur();
+     if(lv<4){
+      var c=cost*(lv+1)*2;
+      if(!canPay('core',c)){SFX.err();flash(b,'no');toast('Pas assez de noyaux');return}
+      pay('core',c);
+      M.wpn[d.id]=lv+1;
+      SFX.unlock();
+      toast(d.n+' — palier '+(lv+1)+' !');
+      save();renderCores(g);updateCur();
+     }else{ /* [NEW P2] UW+ : éveil en gemmes */
+      var gc=uwPlusCost(lv);
+      if(!canPay('gem',gc)){SFX.err();flash(b,'no');toast('Pas assez de gemmes');return}
+      pay('gem',gc);
+      M.wpn[d.id]=lv+1;
+      SFX.unlock();
+      toast(d.n+' — ÉVEIL ★'+(lv+1)+' ! (+30% dégâts armes)');
+      save();renderCores(g);updateCur();
+     }
     });
    }
    g.appendChild(b);
   })(WPN[i]);
+ }
+ /* [NEW P2] Workshop Enhancements — section endgame */
+ var eh=document.createElement('div');
+ eh.style.cssText='grid-column:1/-1;display:flex;align-items:center;gap:8px;font:700 15px Rajdhani;padding:8px 0 4px';
+ eh.innerHTML=ic('core')+'<span>AMÉLIORATIONS FINALES</span><span style="font:500 12px Rajdhani;color:#AEBBE4">— multiplicateurs endgame permanents</span>';
+ g.appendChild(eh);
+ if(!enhUnlocked()){
+  var lk2=document.createElement('div');
+  lk2.style.cssText='grid-column:1/-1;text-align:center;font:600 12.5px Rajdhani;color:#57648F;padding:6px;border:1px dashed #2C3554;border-radius:2px';
+  lk2.textContent='Se débloque au PROTOCOLE P10 (cycle 100 en P9)';
+  g.appendChild(lk2);
+ }else{
+  var e2;
+  for(e2=0;e2<ENHDEF.length;e2++){
+   (function(d2){
+    var l=enhL(d2.id),maxed=l>=d2.mx,locked=d2.req&&enhL(d2.req)<d2.rl;
+    var b2=document.createElement('button');
+    b2.className='upbtn';
+    if(locked){
+     b2.innerHTML='<span class="lc"><span class="nm">'+d2.n+'</span><span class="lv">Requiert '+d2.req+' NIV '+d2.rl+'</span></span>'+
+      '<span class="rcol"><span class="vbox"></span><span class="pbox">'+ic('slock')+'</span></span>';
+     b2.addEventListener('click',function(){SFX.err();toast('Requiert '+d2.req+' niveau '+d2.rl)});
+     g.appendChild(b2);return;
+    }
+    b2.innerHTML='<span class="lc"><span class="nm">'+d2.n+'</span><span class="lv">NIV '+l+' / '+d2.mx+'</span></span>'+
+     '<span class="rcol"><span class="vbox">+'+Math.round(d2.per*100*l)+'%</span><span class="pbox">'+(maxed?'MAX':fmt(enhCost(l))+' '+ic('coin'))+'</span></span>';
+    if(!maxed){
+     b2.querySelector('.pbox').classList.toggle('ok',canPay('coin',enhCost(l)));
+     attachHold(b2,function(){
+      var cc=enhCost(enhL(d2.id));
+      if(!canPay('coin',cc)){flash(b2,'no');return}
+      pay('coin',cc);
+      M.enh[d2.id]=enhL(d2.id)+1;
+      SFX.buy();save();updateCur();
+      if(M.enh[d2.id]>=d2.mx){renderWs();return}
+      b2.querySelector('.vbox').textContent='+'+Math.round(d2.per*100*M.enh[d2.id])+'%';
+      b2.querySelector('.lv').textContent='NIV '+M.enh[d2.id]+' / '+d2.mx;
+      var p4=b2.querySelector('.pbox');
+      p4.innerHTML=fmt(enhCost(M.enh[d2.id]))+' '+ic('coin');
+      p4.classList.toggle('ok',canPay('coin',enhCost(M.enh[d2.id])));
+     });
+    }
+    g.appendChild(b2);
+   })(ENHDEF[e2]);
+  }
  }
 }
 
@@ -2715,6 +2997,34 @@ function renderCards(){
    sr.appendChild(s);
   })(i);
  }
+ /* [NEW P3] presets de deck : tap = appliquer, appui long 600 ms = mémoriser */
+ function longPress(el,fn){
+  var t=null;
+  el.addEventListener('pointerdown',function(){t=setTimeout(function(){t=null;fn()},600)});
+  function cancel(){if(t){clearTimeout(t);t=null}}
+  el.addEventListener('pointerup',cancel);el.addEventListener('pointerleave',cancel);
+ }
+ function renderPresets(sr){
+  var row=document.createElement('div');
+  row.style.cssText='display:flex;gap:6px;grid-column:1/-1';
+  ['A','B','C'].forEach(function(k){
+   var btn=document.createElement('button');
+   btn.className='slotUnlock';
+   var p=M.cardPresets[k];
+   btn.innerHTML='PRÉSET '+k+(p?' <span style="color:var(--mint)">✓</span>':' <span style="color:#57648F">(vide)</span>');
+   btn.addEventListener('click',function(){
+    if(!p){toast('Appui long pour mémoriser le deck actuel');return}
+    for(var i2=0;i2<M.slots;i2++)M.cards.eq[i2]=(p[i2]||null);
+    save();renderCards();SFX.buy();toast('Préset '+k+' appliqué');
+   });
+   longPress(btn,function(){
+    M.cardPresets[k]=M.cards.eq.slice(0,M.slots);
+    save();renderCards();SFX.unlock();toast('Deck mémorisé dans le préset '+k);
+   });
+   row.appendChild(btn);
+  });
+  sr.appendChild(row);
+ }
  if(M.slots<22){
   var u=document.createElement('button');
   u.className='slotUnlock';
@@ -2722,10 +3032,11 @@ function renderCards(){
   u.addEventListener('click',function(){
    var c=SLOTCOST[M.slots-1];
    if(!canPay('gem',c)){SFX.err();toast('Pas assez de gemmes');return}
-   pay('gem',c);M.slots++;SFX.unlock();save();renderCards();updateCur();
+   pay('gem',c);M.slots++;M.cards.eq.push(null);SFX.unlock();save();renderCards();updateCur(); /* [FIX] le slot acheté devient équipable */
   });
-  sr.appendChild(u);
+   sr.appendChild(u);
  }
+ renderPresets(sr); /* [NEW P3] */
  var have=0;
  for(var q=0;q<CARDS.length;q++)if(cardLv(CARDS[q].id)>0)have++;
  $('collCount').textContent=have+'/'+CARDS.length;
@@ -2781,7 +3092,7 @@ function renderCards(){
 }
 
 /* ============ labo multi-slots ============ */
-var LABSLOT=[100,400];
+var LABSLOT=[100,400,900,1600,2500]; /* [NEW P2] 5 salles */
 function labAct(id){
  var rs=M.lab.rs||[],j;
  for(j=0;j<rs.length;j++)if(rs[j].id===id)return rs[j];
@@ -2793,16 +3104,19 @@ function renderLab(){
   b.innerHTML=ic('lock')+'<span>LABORATOIRE VERROUILLÉ<br><small style="color:#57648F">Terminez la vague 90 du PALIER 2 (record)</small></span>';
   return;
  }
- var html='<div class="mrow" style="border-left-color:#C9C4FF"><div><div class="mn">Salles de recherche : '+M.lab.slots+'/3</div>'+
+ var html='<div class="mrow" style="border-left-color:#C9C4FF"><div><div class="mn">Salles de recherche : '+M.lab.slots+'/5</div>'+
   '<div class="md">Plusieurs recherches en parallèle, elles progressent même le jeu fermé.</div></div>'+
-  (M.lab.slots<3?'<button class="mb labslot">'+fmt(LABSLOT[M.lab.slots-1])+' '+ic('gem')+'</button>':'<button class="mb" disabled>MAX</button>')+'</div>';
+  (M.lab.slots<5?'<button class="mb labslot">'+fmt(LABSLOT[M.lab.slots-1])+' '+ic('gem')+'</button>':'<button class="mb" disabled>MAX</button>')+'</div>';
  var i;
  for(i=0;i<LABS.length;i++){
   (function(d){
-   var l=M.lab.lvl[d.id]||0,cost=Math.ceil(d.c*Math.pow(1.7,l)),dur=d.d*Math.pow(1.6,l);
+   var l=M.lab.lvl[d.id]||0,cost=Math.ceil(d.c*Math.pow(1.7,l)),dur=d.d*60*Math.pow(1.25,l); /* [NEW P2] durées longues (base en minutes) */
    var act=labAct(d.id);
    var right;
-   if(act)right='<div style="flex:1;max-width:120px"><div class="wbar" style="height:10px"><div class="wfill" id="lb_'+d.id+'" style="width:0%"></div></div><div class="md" id="lt_'+d.id+'" style="text-align:right;font-size:11px"></div></div>';
+   if(act){
+    var rem0=Math.max(0,(act.end-Date.now())/1000),rc0=Math.max(10,Math.ceil(rem0/3600*15));
+    right='<div style="flex:1;max-width:120px"><div class="wbar" style="height:10px"><div class="wfill" id="lb_'+d.id+'" style="width:0%"></div></div><div class="md" id="lt_'+d.id+'" style="text-align:right;font-size:11px"></div></div><button class="mb labrush" data-l="'+d.id+'">⚡ '+fmt(rc0)+' '+ic('gem')+'</button>'; /* [NEW P2] rush */
+   }
    else if((M.lab.rs||[]).length>=M.lab.slots)right='<button class="mb" disabled>SALLE PLEINE</button>';
    else right='<button class="mb labbuy" data-l="'+d.id+'">'+fmtT(dur)+' · '+fmt(cost)+' '+ic('coin')+'</button>';
    html+='<div class="mrow"><div><div class="mn">'+d.n+'</div><div class="md">+'+Math.round(d.per*100)+'% / niv — NIV '+l+'</div></div>'+right+'</div>';
@@ -2828,10 +3142,25 @@ function renderLab(){
     var cost=Math.ceil(dd.c*Math.pow(1.7,M.lab.lvl[dd.id]||0));
     if(!canPay('coin',cost)){SFX.err();toast('Pas assez de pièces');return}
     pay('coin',cost);
-    M.lab.rs.push({id:dd.id,start:Date.now(),end:Date.now()+dd.d*Math.pow(1.6,M.lab.lvl[dd.id]||0)*1000});
+    M.lab.rs.push({id:dd.id,start:Date.now(),end:Date.now()+dd.d*60*Math.pow(1.25,M.lab.lvl[dd.id]||0)*1000}); /* [NEW P2] durées longues */
+    syncLabNotify();
     SFX.buy();save();renderLab();updateCur();
    });
   })(btns[i]);
+ }
+ var rbs=b.querySelectorAll('.labrush'); /* [NEW P2] rush en gemmes */
+ for(i=0;i<rbs.length;i++){
+  (function(x){
+   x.addEventListener('click',function(){
+    var a=labAct(x.getAttribute('data-l'));
+    if(!a)return;
+    var rem=(a.end-Date.now())/1000,rc=Math.max(10,Math.ceil(rem/3600*15));
+    if(!canPay('gem',rc)){SFX.err();toast('Pas assez de gemmes');return}
+    pay('gem',rc);
+    a.end=Date.now()-1;
+    SFX.buy();save();
+   });
+  })(rbs[i]);
  }
  updateLabBars();
 }
@@ -2859,7 +3188,7 @@ function labTick(){
    toast('Recherche terminée : '+(def?def.n:c.id));SFX.unlock();
   }
  }
- if(done){save();if(screen==='lab')renderLab()}
+ if(done){save();if(screen==='lab')renderLab();syncLabNotify()}
 }
 setInterval(labTick,500);
 setInterval(updateLabBars,600);
@@ -3118,7 +3447,7 @@ function spawnEnemy(type,px,py){
  var hp=enHp(w,t)*d.hp;
  if(d.boss)hp*=R.pk.bossHp;
  var cd=enAtk(w,t)*d.atk;
- var sp=34*Math.min(2,1+.004*w)*d.sp;
+ var sp=34*Math.min(2,1+.004*w)*d.sp*bcMul(R.tier,'spd'); /* [NEW P2] battle condition */
  var x=px,y=py;
  if(x===undefined){var e=edgeSpawn();x=e[0];y=e[1]}
  if(d!==EDEF.cmd&&d!==EDEF.boss){
@@ -3143,11 +3472,13 @@ function spawnEnemy(type,px,py){
 }
 function startWave(){
  R.phase='combat';R.waveKilled=0;
+ dirProg('wave',1); /* [FIX] la mission « Atteindre le cycle X » n'était jamais alimentée */
+ if(M.st.runs<3&&R.wave===8&&!R.arena)waveAnnounce('GARDIEN AU CYCLE 10 — PRÉPARE TOI !','boss'); /* [NEW P4] onboarding */
  SRND=R.arena?mulberry32((R.arenaSeed+R.wave*7919)>>>0):null;
  var w=R.wave;
  var dur=waveDuration(w);
- var n=Math.round(waveBaseCount(w)*R.s.ebal);
- var boss=(w>=10&&w%10===0);
+ var n=Math.round(waveBaseCount(w)*R.s.ebal*bcMul(R.tier,'cnt')); /* [NEW P2] battle condition */
+ var boss=(w>=bcBoss(R.tier)&&w%bcBoss(R.tier)===0); /* [NEW P2] battle condition */
  if(boss){spawnEnemy('boss');for(var i=0;i<4;i++)spawnEnemy('normal');n=Math.max(0,n-5)}
  if(w>=4500&&!R.overheat){
   R.overheat=true;
@@ -3203,7 +3534,7 @@ function startRun(tier,resume,arena){
   cds:{gt:0,dw:0,bh:0,ps:0,stw:0},buffGT:0,clT:1,msT:1,nid:1,boss:null,
   phase:'intro',intro:1.4,dying:0,dead:false,flash:0,
   interT:0,queue:[],spawnT:.5,s:null,prevBest:M.best[tier]||0,shake:0,
-  pk:{qty:{},dmg:1,dmgT:1,hpM:1,cash:1,coin:1,regen:1,def:0,freeP:0,aspd:1,lsM:1,kbM:1,bossHp:1,espd:1,uwDmg:1,perkInt:30},
+  pk:{qty:{},dmg:1,dmgT:1,hpM:1,cash:1,coin:1,regen:1,def:0,freeP:0,aspd:1,lsM:1,kbM:1,bossHp:1,espd:1,uwDmg:uwPlusAll(),perkInt:30}, /* [NEW P2] UW+ inclus */
   nextPerk:30,slA:0,bm:1,overheat:false,goldGot:0,
   /* [NEW] Bob / pub in-run / pièces-min */
   bob:{a:rnd(TAU),life:0,resp:12},bobGot:0,adNext:600,logCoin:[],rateOn:false};
@@ -3220,10 +3551,12 @@ function startRun(tier,resume,arena){
   for(k in resume.ups)if(k in R.ups)R.ups[k]=resume.ups[k];
   R.wave=resume.wave;R.cash=resume.cash;R.kills=resume.kills;
   R.runCoins=resume.rc||0;R.time=resume.t||0;R.prevBest=resume.pb||0;R.tb=resume.tb||0;
+  if(resume.pk&&typeof resume.pk==='object'){var q;for(q in R.pk)if(resume.pk[q]!==undefined)R.pk[q]=resume.pk[q]} /* [FIX] perks restaurés */
+  R.boost=!!resume.boost;R.ddUsed=!!resume.dd;R.swUsed=!!resume.sw;R.bobGot=resume.bob||0;R.goldGot=resume.gold||0;
   R.intro=0;R.phase='combat';
  }else{
   dirProg('runs',1);
-  waveAnnounce(arena?arenaName():'SIMULATION ACTIVE',null);
+  waveAnnounce(arena?arenaName():(BCOND[tier]?BCOND[tier].n:'SIMULATION ACTIVE'),null); /* [NEW P2] annonce la condition */
  }
  R.s=stats();
  if(resume)startWave();
@@ -3250,7 +3583,7 @@ function startRun(tier,resume,arena){
 function saveResume(){
  if(!R||!R.active||R.arena){if(R&&R.arena)M.resume=null,save();return}
  M.st.time+=R.time-(R.tb||0);R.tb=R.time;
- M.resume={tier:R.tier,wave:R.wave,cash:R.cash,ups:R.ups,hp:R.tower.hp,kills:R.kills,rc:R.runCoins,t:R.time,pb:R.prevBest,tb:R.tb};
+ M.resume={tier:R.tier,wave:R.wave,cash:R.cash,ups:R.ups,hp:R.tower.hp,kills:R.kills,rc:R.runCoins,t:R.time,pb:R.prevBest,tb:R.tb,pk:R.pk,boost:R.boost,dd:R.ddUsed,sw:R.swUsed,bob:R.bobGot,gold:R.goldGot}; /* [FIX] perks/boost/etc conservés au resume */
  save();
 }
 function recalc(){
@@ -3640,7 +3973,7 @@ function kill(e,crit){
   R.floats.push({x:e.x,y:e.y-e.d.r-30,t:1,txt:'CRIT +'+fmt(bonus)+' C',coin:1});
  }
  if(e.gold){
-  M.gems++;R.runGems++;
+  M.gems++;R.runGems++;evProg('gold',1); /* [NEW P3] */
   if(R.floats.length>60)R.floats.shift();
   R.floats.push({x:e.x,y:e.y-e.d.r-30,t:1.1,txt:'+1 GEMME',gem:true});
  }
@@ -3655,6 +3988,7 @@ function kill(e,crit){
   var g=2+R.tier;
   M.gems+=g;R.runGems+=g;toast('+'+g+' gemmes');
   M.st.boss++;
+  evProg('boss',1); /* [NEW P3] */
   var st=0;
   if(R.wave%50===0)st=3;
   else if(Math.random()<.08)st=1;
@@ -3825,11 +4159,11 @@ function update(dt){
     if(p2.drag){p2.vx*=Math.pow(p2.drag,dt*60);p2.vy*=Math.pow(p2.drag,dt*60)}
    }
   }
-  R.parts=R.parts.filter(function(p){return p.t>0});
+  compactT(R.parts);
   for(i2=0;i2<R.shocks.length;i2++){var s3=R.shocks[i2];s3.t-=dt;s3.r+=s3.v*dt}
   R.shocks=R.shocks.filter(function(s){return s.t>0});
   for(i2=0;i2<R.floats.length;i2++){R.floats[i2].t-=dt;R.floats[i2].y-=36*dt}
-  R.floats=R.floats.filter(function(f){return f.t>0});
+  compactT(R.floats);
   if(R.dying<=0)finishGameOver();
   return;
  }
@@ -4139,7 +4473,7 @@ function update(dt){
    }
   }
  }
- R.enemies=R.enemies.filter(function(e){return !e.dead});
+ compactAlive(R.enemies);
  for(i=0;i<R.bullets.length;i++){
   var b=R.bullets[i];b.t-=dt;
   var et=b.tg;
@@ -4171,7 +4505,7 @@ function update(dt){
    b.t=0;
   }else{b.x+=ddx/dd*stp;b.y+=ddy/dd*stp}
  }
- R.bullets=R.bullets.filter(function(b){return b.t>0});
+ compactT(R.bullets);
  for(i=0;i<R.ebul.length;i++){
   var eb=R.ebul[i];eb.t-=dt;eb.x+=eb.vx*dt;eb.y+=eb.vy*dt;
   if(Math.hypot(eb.x-200,eb.y-200)<15){
@@ -4191,7 +4525,7 @@ function update(dt){
    }else eb.t=0;
   }
  }
- R.ebul=R.ebul.filter(function(b){return b.t>0});
+ compactT(R.ebul);
  updateFx(dt);
 }
 function updateFx(dt){
@@ -4204,13 +4538,13 @@ function updateFx(dt){
    if(pp.drag){pp.vx*=Math.pow(pp.drag,dt*60);pp.vy*=Math.pow(pp.drag,dt*60)}
   }
  }
- R.parts=R.parts.filter(function(p){return p.t>0});
+ compactT(R.parts);
  for(i=0;i<R.shocks.length;i++){var s=R.shocks[i];s.t-=dt;s.r+=s.v*dt}
  R.shocks=R.shocks.filter(function(s){return s.t>0});
  for(i=0;i<R.floats.length;i++){R.floats[i].t-=dt;R.floats[i].y-=36*dt}
- R.floats=R.floats.filter(function(f){return f.t>0});
+ compactT(R.floats);
  for(i=0;i<R.zaps.length;i++)R.zaps[i].t-=dt;
- R.zaps=R.zaps.filter(function(z){return z.t>0});
+ compactT(R.zaps);
  if(R.info){R.info.t-=dt;if(R.info.t<=0)R.info=null}
  if(R.tower.flash>0)R.tower.flash-=dt;
 }
@@ -4674,7 +5008,8 @@ function updateHud(force){
  $('pCashB').textContent='x'+fdec((1+R.s.cashb)*R.s.cashM*R.pk.cash,2);
  var hf=clamp(R.tower.hp/R.tower.maxhp,0,1);
  $('hpFill').style.transform='scaleX('+hf+')';
- $('hpFill').style.background=hf>.5?'linear-gradient(90deg,#2E9E63,var(--mint) 60%,#D9FFE8)':hf>.25?'linear-gradient(90deg,#B3822A,#FFD23F,#FFEDB0)':'linear-gradient(90deg,#B33A3A,#FF6B6B,#FFC0C0)';
+ var cb=M.set.cb; /* [NEW P4] palette daltonien : bleu / orange / blanc */
+ $('hpFill').style.background=hf>.5?(cb?'linear-gradient(90deg,#2D6FB8,#6FC2FF,#CFEBFF)':'linear-gradient(90deg,#2E9E63,var(--mint) 60%,#D9FFE8)'):hf>.25?(cb?'linear-gradient(90deg,#B87A1A,#FFB43F,#FFE9B0)':'linear-gradient(90deg,#B3822A,#FFD23F,#FFEDB0)'):(cb?'linear-gradient(90deg,#7A7F8C,#E8E8E8,#FFFFFF)':'linear-gradient(90deg,#B33A3A,#FF6B6B,#FFC0C0)');
  $('hpTxt').textContent=fmt(R.tower.hp)+'/'+fmt(R.tower.maxhp);
  $('panelHp').classList.toggle('low',hf<=.25&&R.active);
  $('waveNum').textContent='CYCLE '+R.wave;
@@ -4682,8 +5017,8 @@ function updateHud(force){
  $('eHp').textContent=fdec(enHp(R.wave,R.tier),2);
  var wp=R.waveDur>0?clamp(R.waveT/R.waveDur,0,1):0;
  $('waveFill').style.transform='scaleX('+wp+')';
- /* [NEW] pub in-run : visible toutes les 10 min de temps de run */
- $('btnAdRun').classList.remove('on');
+ /* [FIX] pub in-run branchée : dispo après 10 min de run puis toutes les 10 min */
+ $('btnAdRun').classList.toggle('on',!!(R.active&&!R.arena&&R.time>=R.adNext));
  /* [NEW] pièces/min (fenêtre glissante 60s) */
  if(R.rateOn){
   var now2=Date.now();
@@ -4697,6 +5032,16 @@ function updateHud(force){
 }
 
 var DT=1/60,lastT=performance.now()/1000,acc=0;
+/* [NEW P4] compaction in-place — remplace les .filter() qui allouent un array par frame (GC sur mobiles bas de gamme) */
+function compactT(a){var w=0,i;for(i=0;i<a.length;i++)if(a[i].t>0)a[w++]=a[i];a.length=w;return a}
+function compactAlive(a){var w=0,i;for(i=0;i<a.length;i++)if(!a[i].dead)a[w++]=a[i];a.length=w;return a}
+/* [NEW P4] accessibilité : zoom d'interface + mode daltonien */
+function applyUiScale(){
+ var f=M.set.fscale||1,app=$('app');
+ if(app)app.style.zoom=(f===1?'':f);
+ if(R&&R.active)resize();
+}
+function applyCb(){document.body.classList.toggle('cb',!!M.set.cb)}
 function anyOv(){
  return $('ovPause').classList.contains('on')||$('ovSet').classList.contains('on')||$('ovCf').classList.contains('on')||$('ovAd').classList.contains('on')||$('ovPull').classList.contains('on')||$('ovSlot').classList.contains('on')||$('ovPod').classList.contains('on')||$('ovCal').classList.contains('on')||$('ovPerk').classList.contains('on')||$('ovGift').classList.contains('on')||$('ovWave').classList.contains('on'); /* [NEW] panneau CYCLE = pause */
 }
@@ -4716,6 +5061,36 @@ function loop(nowMs){
 requestAnimationFrame(loop);
 
 /* ============ fin de run ============ */
+/* [NEW P4] carte de partage de fin de run */
+function shareRunCard(rec,tier,wave,kills,pc,rg,time,best){
+ try{
+  var cv=document.createElement('canvas');cv.width=720;cv.height=960;
+  var x=cv.getContext('2d');
+  x.fillStyle='#0B0E1E';x.fillRect(0,0,720,960);
+  x.strokeStyle='#FFD23F';x.lineWidth=3;x.strokeRect(14,14,692,932);
+  x.strokeStyle='#2C3554';x.lineWidth=1;x.strokeRect(26,26,668,908);
+  x.textAlign='center';
+  x.fillStyle='#FFD23F';x.font='700 30px sans-serif';x.fillText('T O W E R   D R I V E',360,92);
+  x.fillStyle='#7C89B8';x.font='500 20px sans-serif';x.fillText('SIMULATION TERMINÉE',360,130);
+  if(rec){x.fillStyle='#FF6B6B';x.font='700 34px sans-serif';x.fillText('★ NOUVEAU RECORD ★',360,190)}
+  x.fillStyle='#FFFFFF';x.font='700 120px sans-serif';x.fillText('CYCLE '+wave,360,330);
+  x.fillStyle='#9FB3C8';x.font='500 26px sans-serif';x.fillText('PROTOCOLE P'+(tier+1)+' — record : '+best,360,378);
+  x.fillStyle='#7C89B8';x.font='500 22px sans-serif';x.fillText('CORE DÉTRUIT PAR '+lastKiller.toUpperCase(),360,424);
+  var rows=[['PIÈCES GAGNÉES',fmt(pc)],['GEMMES',fmt(rg||0)],['HOSTILES NEUTRALISÉS',fmt(kills)],['TEMPS DE RUN',fmtT(time)]];
+  var y0=500;
+  for(var i=0;i<rows.length;i++){
+   x.fillStyle='#7C89B8';x.font='500 22px sans-serif';x.textAlign='left';x.fillText(rows[i][0],80,y0+i*90);
+   x.fillStyle='#FFD23F';x.font='700 40px sans-serif';x.textAlign='right';x.fillText(rows[i][1],640,y0+i*90);
+  }
+  x.textAlign='center';x.fillStyle='#57648F';x.font='500 20px sans-serif';
+  x.fillText('king6code.github.io/tower-drive',360,912);
+  var data=cv.toDataURL('image/png').split(',')[1];
+  if(window.NativeAds&&NativeAds.shareImage){NativeAds.shareImage(data);return}
+  var a=document.createElement('a');
+  a.download='tower-drive-run.png';a.href=cv.toDataURL('image/png');a.click();
+  toast('Image générée');
+ }catch(e){toast('Partage indisponible')}
+}
 function showOverScreen(rec,tier,wave,kills,rc,rcash,time,best,arenaScoreV,arenaRankV,rg){
  $('goTitle').textContent='STATS DU JEU';
  $('goWave').textContent='CYCLE '+wave;
@@ -4737,6 +5112,16 @@ function showOverScreen(rec,tier,wave,kills,rc,rcash,time,best,arenaScoreV,arena
   vib([40,60,40,60,120]);
   setTimeout(function(){$('goCard').classList.remove('celebrate')},4000);
  }else $('goCard').classList.remove('celebrate');
+ /* [NEW P4] bouton partage */
+ var sb=$('goShare');
+ if(!sb){
+  sb=document.createElement('button');
+  sb.id='goShare';sb.className='obtn grnb';
+  sb.style.cssText='display:block;width:calc(100% - 24px);margin:10px auto 0';
+  $('goCard').appendChild(sb);
+ }
+ sb.textContent='PARTAGER LA RUN';
+ sb.onclick=function(){shareRunCard(rec,tier,wave,kills,Math.floor(rc),rg,time,best)};
 }
 var lastKiller='les hostiles',lastRunData=null;
 function collectEnd(){
@@ -4761,6 +5146,7 @@ function collectEnd(){
  save();
  lastKiller=R.killer||'les hostiles';
  var d={rec:rec,tier:R.tier,wave:R.wave,kills:R.kills,rc:R.runCoins,rcash:R.runCash,rg:R.runGems||0,time:R.time,best:M.best[R.tier],as:aScore,ar:aRank};
+ seasonEnsure();M.season.xp+=R.wave; /* [NEW P3] XP de saison */
  R=null;SRND=null;
  return d;
 }
@@ -4927,6 +5313,12 @@ function openSettings(){
    '<button class="obtn segb'+(M.set.tgt==='near'?' on':'')+'" data-t="near">Proche</button>'+
    '<button class="obtn segb'+(M.set.tgt==='strong'?' on':'')+'" data-t="strong">Puissant</button>'+
    '<button class="obtn segb'+(M.set.tgt==='far'?' on':'')+'" data-t="far">Lointain</button></div></div>'+
+  /* [NEW P4] accessibilité */
+  '<div class="setrow between"><span>Taille d\'interface</span><div class="seg">'+
+   '<button class="obtn segb'+((M.set.fscale||1)===0.95?' on':'')+'" data-f="0.95">S</button>'+
+   '<button class="obtn segb'+((M.set.fscale||1)===1?' on':'')+'" data-f="1">N</button>'+
+   '<button class="obtn segb'+((M.set.fscale||1)===1.1?' on':'')+'" data-f="1.1">G</button></div></div>'+
+  '<div class="setrow between"><span>Mode daltonien</span><button class="obtn tgl'+(M.set.cb?' on':'')+'" id="sCb">'+(M.set.cb?'ON':'OFF')+'</button></div>'+
   '<button class="obtn" id="sFull">PLEIN ÉCRAN</button>'+
   '<a class="obtn" href="https://king6code.github.io/tower-drive/privacy-policy.html" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">POLITIQUE DE CONFIDENTIALITÉ</a>'+
   '<button class="obtn dng" id="sReset">RÉINITIALISER LA SAUVEGARDE</button>'+ 
@@ -4957,6 +5349,11 @@ function openSettings(){
  for(var i=0;i<segs.length;i++){
   (function(x){x.addEventListener('click',function(){M.set.tgt=x.getAttribute('data-t');save();openSettings()})})(segs[i]);
  }
+ var fsegs=b.querySelectorAll('[data-f]'); /* [NEW P4] taille d'interface */
+ for(i=0;i<fsegs.length;i++){
+  (function(x){x.addEventListener('click',function(){M.set.fscale=parseFloat(x.getAttribute('data-f'));save();applyUiScale();openSettings()})})(fsegs[i]);
+ }
+ $('sCb').addEventListener('click',function(){M.set.cb=!M.set.cb;save();applyCb();openSettings()}); /* [NEW P4] */
  $('sFull').addEventListener('click',function(){
   tryFull();
   if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen();
@@ -4980,6 +5377,7 @@ function openSettings(){
  $('sClose').addEventListener('click',function(){$('ovSet').classList.remove('on')});
  $('sReset').addEventListener('click',function(){
   confirmBox('Effacer TOUTE la progression ?',function(){
+   _noSave=true; /* [FIX] empêche le flush débondé de réécrire la sauvegarde après effacement */
    try{localStorage.removeItem(KEY)}catch(e){}
    location.reload();
   });
@@ -5012,6 +5410,7 @@ document.addEventListener('visibilitychange',function(){
 })();
 normalizeCards();
 fitApp();
+applyUiScale();applyCb(); /* [NEW P4] accessibilité appliquée au démarrage */
 ensureDirect();
 ensureArenaWeek();
 buildNav();
