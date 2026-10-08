@@ -9,14 +9,14 @@ window.draw=function(){};window.updateHud=function(){};window.updUltBtns=functio
 try{window.SFX=new Proxy({}, {get:function(){return function(){}}})}catch(e){}
 silentPause=true; /* la boucle de la page ne touche plus à R */
 
-var PRIO_CARDS=['dmg','hp','aspd','regen','coin','cash','swnd','stw','wskip','esh','crit','edef','freeup','cco','range','slow','bers','wacc','ebal'];
+var PRIO_CARDS=['dmg','hp','isp','aspd','regen','coin','cash','swnd','stw','wskip','esh','crit','edef','freeup','cco','range','slow','bers','wacc','ebal'];
 var PRIO_WPN=['gt','bh','dw','cl','mines','ms','cf','ps','sl'];
 var PRIO_PERK=['DÉGÂTS','CADENCE','ARMES','INTÉGRITÉ','PIÈCES','BLINDAGE','RÉGÉN','CRÉDITS','MODULES','PERKS','SOINS','SAUT'];
 var SEQ=[0,0,1,0,2,0,1,0];
 var PROFILES={
- casual:{sessions:2,realMin:20,speed:2,chestGems:25,chestCores:0,revive:true},
- regular:{sessions:3,realMin:60,speed:3,chestGems:70,chestCores:0,revive:true},
- engaged:{sessions:4,realMin:120,speed:5,chestGems:185,chestCores:45,revive:true}
+ casual:{sessions:2,realMin:20,speedCap:3,chestGems:25,chestCores:0,revive:true},
+ regular:{sessions:3,realMin:60,speedCap:5,chestGems:70,chestCores:0,revive:true},
+ engaged:{sessions:4,realMin:120,speedCap:6.25,chestGems:185,chestCores:45,revive:true}
 };
 var S=null;
 
@@ -59,17 +59,21 @@ function spendLab(budget){
  var n=0;
  for(var g=0;g<10;g++){
   if((M.lab.rs||[]).length>=M.lab.slots)break;
-  var best=null;
-  for(var k=0;k<LABS.length;k++){
-   var d=LABS[(S.labrr+k)%LABS.length];
-   if(labAct(d.id))continue;
-   var cost=Math.ceil(d.c*Math.pow(1.7,M.lab.lvl[d.id]||0));
-   if(cost<=Math.min(budget,M.coins)){best={d:d,cost:cost};break}
+  var best=null,order=[];
+  for(var k=0;k<LABS.length;k++)order.push(LABS[(S.labrr+k)%LABS.length]);
+  var sp=LABS.filter(function(d){return d.id==='spd'})[0];
+  order.unshift(sp);
+  for(var o=0;o<order.length;o++){
+   var d=order[o],l=M.lab.lvl[d.id]||0;
+   if(labAct(d.id)||(d.max&&l>=d.max))continue;
+   var cost=labCost(d,l);
+   if(cost<=Math.min(budget,M.coins)){best={d:d,cost:cost,l:l};break}
+   if(d.id==='spd'&&l<d.max)break; /* on économise pour la vitesse */
   }
   if(!best)break;
-  S.labrr++;
+  if(best.d.id!=='spd')S.labrr++;
   M.coins-=best.cost;budget-=best.cost;
-  M.lab.rs.push({id:best.d.id,start:Date.now(),end:Date.now()+best.d.d*60*Math.pow(1.25,M.lab.lvl[best.d.id]||0)*1000});
+  M.lab.rs.push({id:best.d.id,start:Date.now(),end:Date.now()+labDurS(best.d,best.l)*1000});
   n++;
  }
  return n;
@@ -179,7 +183,8 @@ function finishRun(){
 }
 function botTick(){
  /* achats en partie */
- for(var k=0;k<6;k++){
+ var nb=R.time<90?60:6;
+ for(var k=0;k<nb;k++){
   var cat=SEQ[S.rr%SEQ.length],best=null,bc=1e300;
   for(var i=0;i<UDEF.length;i++){var u=UDEF[i];if(u.cat!==cat||!ruVisible(u))continue;var l=R.ups[u.id];if(u.cap!==undefined&&l>=u.cap)continue;var c=ruCost(u,l);if(c<bc){bc=c;best=u}}
   if(!best){S.rr++;continue}
@@ -225,7 +230,7 @@ function snapshot(){
  var cards=0,cardLvSum=0;for(var id in M.cards.own){cards++;cardLvSum+=cardLv(id)}
  var wsSum=0;for(var k in M.ws)wsSum+=M.ws[k];
  var labSum=0;for(var k2 in M.lab.lvl)labSum+=M.lab.lvl[k2];
- return {day:S.day,best:M.best.slice(0,6).join('/'),tiers:tiersUnlocked(),ws:wsSum,cards:cards+'('+cardLvSum+'★)',slots:M.slots,wpn:countWpn()+'(Σ'+Object.values(M.wpn).reduce(function(a,b){return a+b},0)+')',gems:M.gems,cores:M.cores,coins:Math.round(M.coins),lab:labSum,mods:(M.mods.lv.atk||0)+'/'+(M.mods.lv.def||0)+'/'+(M.mods.lv.eco||0),runs:S.runs,hours:Math.round(S.gameSec/360)/10};
+ return {day:S.day,best:M.best.slice(0,6).join('/'),tiers:tiersUnlocked(),ws:wsSum,cards:cards+'('+cardLvSum+'★)',slots:M.slots,wpn:countWpn()+'(Σ'+Object.values(M.wpn).reduce(function(a,b){return a+b},0)+')',gems:M.gems,cores:M.cores,coins:Math.round(M.coins),lab:labSum,spdLv:(M.lab.lvl.spd||0),spd:S.lastSpd||1,mods:(M.mods.lv.atk||0)+'/'+(M.mods.lv.def||0)+'/'+(M.mods.lv.eco||0),runs:S.runs,hours:Math.round(S.gameSec/360)/10};
 }
 function simDays(n,budgetMs){
  var t0=performance.now(),done=0;
@@ -233,11 +238,12 @@ function simDays(n,budgetMs){
   if(S.day>0)FAKE.t+=24*3600e3;
   FAKE.t=Math.floor(FAKE.t/86400e3)*86400e3+8*3600e3;
   dailyIncome();
-  var P=S.P,gsec=P.realMin*60*P.speed/P.sessions;
+  var P=S.P;
   for(var s=0;s<P.sessions;s++){
    FAKE.t+=s*5*3600e3;
    labTick();
    metaSpend();
+   var spdNow=Math.min(P.speedCap,SPD_STEPS[spdMax()]),gsec=P.realMin*60*spdNow/P.sessions;S.lastSpd=spdNow;
    play(gsec);
    metaSpend();
   }

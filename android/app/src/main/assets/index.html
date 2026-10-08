@@ -1276,7 +1276,7 @@ function palHexSvg(p,size){
 /* ============ déverrouillages ============ */
 function arenaUnlocked(){return bestAny()>=60}
 function eventUnlocked(){return bestAny()>=70}
-function labUnlocked(){return (M.best[1]||0)>=90}
+function labUnlocked(){return bestAny()>=30} /* [FIX] wiki : labos débloqués au palier 1, cycle 30 */
 function isWeekend(){var d=new Date().getDay();return d===0||d===6}
 function arenaWeek(){
  var d=new Date();
@@ -1933,6 +1933,7 @@ var CARDS=[
  {id:'swnd',n:'Second souffle',r:2,stat:'swndT',lvs:[10,15,20,25,30,35,40],fmt:function(v){return 'Réanimation + '+v+'s invincible'}},
  {id:'wacc',n:'Accélérateur',r:2,stat:'waccP',lvs:[.30,.34,.38,.42,.46,.50,.54],fmt:function(v){return '−'+Math.round(v*100)+'% délai entre cycles'}},
  {id:'bers',n:'Berserker',r:2,stat:'bersP',lvs:[.008,.009,.010,.011,.012,.013,.014],fmt:function(v){return '+'+fdec(v*100,1)+'% dég./dégâts subis (max ×8)'}},
+ {id:'isp',n:'Intro Sprint',r:2,stat:'sprintW',lvs:[40,80,120,200,300,500,800],fmt:function(v){return 'Saute au cycle '+v+' max (ton record −1)'}},
  {id:'esh',n:'Bouclier énerg.',r:2,stat:'eshN',lvs:[1,1,1,1,1,1,1],fmt:function(){return 'Ignore 1 coup, recharge 60s'}}
 ];
 var RARN=['COMMUN','RARE','ÉPIQUE'];
@@ -1945,10 +1946,15 @@ function cardCopies(id){var r=M.cards.own[id];return(r&&typeof r.c==='number'&&!
 function cardVal(c,lv){try{var l=clamp(Math.round(lv),1,7);return c.fmt(c.lvs[l-1])}catch(e){return ''}}
 
 var LABS=[
+ {id:'spd',n:'Vitesse de jeu',per:0,d:20,c:300,max:7},
  {id:'dmg',n:'Dégâts',per:.01,d:30,c:150},{id:'hp',n:'Intégrité',per:.01,d:30,c:150},
  {id:'cash',n:'Crédits',per:.02,d:60,c:300},{id:'coin',n:'Pièces',per:.02,d:90,c:500},
  {id:'aspd',n:'Cadence',per:.01,d:180,c:1000},{id:'crit',n:'Critique',per:.01,d:300,c:1500}
 ];
+/* [NEW] recherche « Vitesse de jeu » : 7 niveaux, coûts/durées dédiés (wiki : la vitesse max se débloque par le labo) */
+var LABSPD_C=[300,1500,8000,40000,200000,1000000,5000000],LABSPD_M=[20,60,180,480,960,1800,2880];
+function labCost(d,l){return d.id==='spd'?LABSPD_C[Math.min(l,6)]:Math.ceil(d.c*Math.pow(1.7,l))}
+function labDurS(d,l){return d.id==='spd'?LABSPD_M[Math.min(l,6)]*60:d.d*60*Math.pow(1.25,l)}
 /* [NEW P2] Workshop Enhancements — couche endgame (style The Tower), déblocage P10 */
 var ENHDEF=[
  {id:'dmgE',n:'Dégâts +',mx:100,per:.02},
@@ -1987,7 +1993,7 @@ function uwCost(){
  for(i=0;i<WPN.length;i++)if(wlv(WPN[i].id)>0)owned++;
  return UW_COST[Math.min(owned,UW_COST.length-1)];
 }
-var SPD_STEPS=[1,1.5,2,3,5];
+var SPD_STEPS=[1,1.5,2,2.5,3,3.5,4,5,6.25];
 var MODDEF=[
  {id:'atk',n:"Module d'attaque",per:.08,f:function(l){return '+'+Math.round(l*8)+'% dégâts'}},
  {id:'def',n:'Module de défense',per:.10,f:function(l){return '+'+Math.round(l*10)+'% intégrité'}},
@@ -1995,7 +2001,7 @@ var MODDEF=[
 ];
 
 function cardB(){
- var b={dmgM:1,aspdM:1,hpM:1,regenM:1,rangeM:1,cashM:1,coinM:1,slow:0,critA:0,defA:0,ebal:1,freeP:0,ccoP:0,wskipP:0,stwM:1,swndT:0,waccP:0,bersP:0,eshN:0};
+ var b={dmgM:1,aspdM:1,hpM:1,regenM:1,rangeM:1,cashM:1,coinM:1,slow:0,critA:0,defA:0,ebal:1,freeP:0,ccoP:0,wskipP:0,stwM:1,swndT:0,waccP:0,bersP:0,eshN:0,sprintW:0};
  for(var i=0;i<M.cards.eq.length;i++){ /* [FIX] bonus sur tous les slots équipés (avant: figé à 4) */
   var id=M.cards.eq[i];if(!id)continue;
   var def=cardDef(id);if(!def)continue;
@@ -2003,7 +2009,7 @@ function cardB(){
   var v=def.lvs[lv-1];
   if(def.stat==='ebal'||def.stat==='stwM')b[def.stat]*=v;
   else if(def.stat==='slow'||def.stat==='critA'||def.stat==='defA'||def.stat==='freeP'||def.stat==='ccoP'||def.stat==='wskipP'||def.stat==='waccP'||def.stat==='bersP')b[def.stat]+=v;
-  else if(def.stat==='swndT'||def.stat==='eshN')b[def.stat]=Math.max(b[def.stat],v);
+  else if(def.stat==='swndT'||def.stat==='eshN'||def.stat==='sprintW')b[def.stat]=Math.max(b[def.stat],v);
   else b[def.stat]*=v;
  }
  return b;
@@ -2085,7 +2091,7 @@ var NAVDEF=[
  {id:'battle',sid:'battle',icn:'swordTab'},
  {id:'ws',sid:'ws',icn:'hammer',fn:function(){wsTab=0}},
  {id:'cards',sid:'cards',icn:'cardI',lock:function(){return M.tutStage<2},msg:'Débloqué après l\'atelier'},
- {id:'lab',sid:'lab',icn:'flask',lock:function(){return !labUnlocked()},msg:'Terminez la vague 90 du PALIER 2 (record)'},
+ {id:'lab',sid:'lab',icn:'flask',lock:function(){return !labUnlocked()},msg:'Atteignez le cycle 30 (record)'},
  {id:'mod',sid:'mod',icn:'chip',lock:function(){return bestAny()<30},msg:'Atteignez le cycle 30 (record)'},
  {id:'store',sid:'store',icn:'cart'}
 ];
@@ -3202,7 +3208,7 @@ function labAct(id){
 function renderLab(){
  var b=$('labBody');
  if(!labUnlocked()){
-  b.innerHTML=ic('lock')+'<span>LABORATOIRE VERROUILLÉ<br><small style="color:#57648F">Terminez la vague 90 du PALIER 2 (record)</small></span>';
+  b.innerHTML=ic('lock')+'<span>LABORATOIRE VERROUILLÉ<br><small style="color:#57648F">Atteignez le cycle 30 (record)</small></span>';
   return;
  }
  var html='<div class="mrow" style="border-left-color:#C9C4FF"><div><div class="mn">Salles de recherche : '+M.lab.slots+'/5</div>'+
@@ -3211,16 +3217,17 @@ function renderLab(){
  var i;
  for(i=0;i<LABS.length;i++){
   (function(d){
-   var l=M.lab.lvl[d.id]||0,cost=Math.ceil(d.c*Math.pow(1.7,l)),dur=d.d*60*Math.pow(1.25,l); /* [NEW P2] durées longues (base en minutes) */
+   var l=M.lab.lvl[d.id]||0,cost=labCost(d,l),dur=labDurS(d,l); /* [NEW P2] durées longues (base en minutes) */
    var act=labAct(d.id);
    var right;
    if(act){
     var rem0=Math.max(0,(act.end-Date.now())/1000),rc0=Math.max(10,Math.ceil(rem0/3600*15));
     right='<div style="flex:1;max-width:120px"><div class="wbar" style="height:10px"><div class="wfill" id="lb_'+d.id+'" style="width:0%"></div></div><div class="md" id="lt_'+d.id+'" style="text-align:right;font-size:11px"></div></div><button class="mb labrush" data-l="'+d.id+'">⚡ '+fmt(rc0)+' '+ic('gem')+'</button>'+(act.ad?'':'<button class="mb labad" data-l="'+d.id+'">−1 h ▶</button>'); /* [NEW P2] rush + [NEW] vidéo */
    }
+   else if(d.max&&l>=d.max)right='<button class="mb" disabled>MAX</button>';
    else if((M.lab.rs||[]).length>=M.lab.slots)right='<button class="mb" disabled>SALLE PLEINE</button>';
    else right='<button class="mb labbuy" data-l="'+d.id+'">'+fmtT(dur)+' · '+fmt(cost)+' '+ic('coin')+'</button>';
-   html+='<div class="mrow"><div><div class="mn">'+d.n+'</div><div class="md">+'+Math.round(d.per*100)+'% / niv — NIV '+l+'</div></div>'+right+'</div>';
+   html+='<div class="mrow"><div><div class="mn">'+d.n+'</div><div class="md">'+(d.id==='spd'?'Vitesse max ×'+fdec(SPD_STEPS[Math.min(SPD_STEPS.length-1,1+l)],2)+' — NIV '+l+'/'+d.max:'+'+Math.round(d.per*100)+'% / niv — NIV '+l)+'</div></div>'+right+'</div>';
   })(LABS[i]);
  }
  b.style.cssText='flex:1;overflow-y:auto;min-height:0;padding:0 8px';
@@ -3240,10 +3247,11 @@ function renderLab(){
     var dd=null,j;
     for(j=0;j<LABS.length;j++)if(LABS[j].id===x.getAttribute('data-l'))dd=LABS[j];
     if(!dd||labAct(dd.id)||(M.lab.rs||[]).length>=M.lab.slots)return;
-    var cost=Math.ceil(dd.c*Math.pow(1.7,M.lab.lvl[dd.id]||0));
+    if(dd.max&&(M.lab.lvl[dd.id]||0)>=dd.max)return;
+    var cost=labCost(dd,M.lab.lvl[dd.id]||0);
     if(!canPay('coin',cost)){SFX.err();toast('Pas assez de pièces');return}
     pay('coin',cost);
-    M.lab.rs.push({id:dd.id,start:Date.now(),end:Date.now()+dd.d*60*Math.pow(1.25,M.lab.lvl[dd.id]||0)*1000}); /* [NEW P2] durées longues */
+    M.lab.rs.push({id:dd.id,start:Date.now(),end:Date.now()+labDurS(dd,M.lab.lvl[dd.id]||0)*1000}); /* [NEW P2] durées longues */
     syncLabNotify();
     SFX.buy();save();renderLab();updateCur();
    });
@@ -3684,6 +3692,22 @@ function spawnEnemy(type,px,py){
  if(d.boss){R.boss=en}
  return en;
 }
+/* [NEW] Intro Sprint (wiki) : on démarre la partie directement près du record, cash des vagues sautées crédité, aucune pièce gagnée */
+function introSprint(){
+ if(!R||R.arena||R.sprintDone)return;
+ R.sprintDone=true;
+ var cap=cardB().sprintW;
+ if(!(cap>0))return;
+ var lim=Math.min(cap,(M.best[R.tier]||0)-1);
+ var target=Math.floor((lim-1)/10)*10+1;
+ if(target<=10)return;
+ var cash=0,w;
+ for(w=1;w<target;w++)cash+=(25*Math.pow(1.26,w-1)+R.s.cashw)*(1+R.s.cashb)*R.s.cashM*R.pk.cash*(w<20?1.6:1);
+ R.cash+=cash;R.runCash+=cash;
+ R.wave=target;
+ R.nextPerk=Math.max(R.nextPerk||0,target+R.pk.perkInt);
+ toast('INTRO SPRINT : cycle '+target+' — cash +'+fmt(cash));
+}
 function startWave(){
  R.phase='combat';R.waveKilled=0;
  dirProg('wave',1); /* [FIX] la mission « Atteindre le cycle X » n'était jamais alimentée */
@@ -3893,7 +3917,7 @@ function buyRun(u,b){
  }
 })();
 
-function spdMax(){return bestAny()>=50?4:bestAny()>=20?3:1}
+function spdMax(){return Math.min(SPD_STEPS.length-1,1+((M.lab&&M.lab.lvl&&M.lab.lvl.spd)||0))} /* [FIX] vitesse max = recherche du labo (x1,5 de base, x6,25 au niveau 7) */
 function updSpeedUI(){
  $('spdVal').textContent=silentPause?'x0,0':'x'+fdec(SPD_STEPS[M.spdIdx],1);
  $('spdUp').style.opacity=(M.spdIdx>=spdMax()&&!silentPause)?.4:1;
@@ -4438,7 +4462,7 @@ function update(dt){
  if(t.hp>0&&t.hp<t.maxhp&&!R.regenOff)t.hp=Math.min(t.maxhp,t.hp+R.s.regen*R.pk.regen*dt);
  if(R.intro>0){
   R.intro-=dt;
-  if(R.intro<=0){R.intro=0;R.phase='combat';startWave()}
+  if(R.intro<=0){R.intro=0;R.phase='combat';introSprint();startWave()}
   updateFx(dt);
   return;
  }
