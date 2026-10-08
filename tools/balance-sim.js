@@ -248,4 +248,6 @@ function simDays(n,budgetMs){
 }
 window.TDSIM={setSeq:function(a){SEQ=a},setProfile:function(n,o){for(var k in o)PROFILES[n][k]=o[k]},newState:newState,simDays:simDays,snapshot:snapshot,state:function(){return S},PROFILES:PROFILES,play:play,metaSpend:metaSpend};
 })();
+window.runAsync=function(target){if(window.__run)return 'already';window.__run=true;(function step(){if(TDSIM.state().day>=target){window.__run=false;return}TDSIM.simDays(1,1);setTimeout(step,5)})();return 'started'};
+window.prog=function(){var S=TDSIM.state();return JSON.stringify({day:S.day,running:!!window.__run,snap:S.daily[S.daily.length-1],runs:S.runLog.slice(-4).map(function(r){return 'W'+r.wave+' '+Math.round(r.sec/60)+'m'})})};
 'sim loaded'
