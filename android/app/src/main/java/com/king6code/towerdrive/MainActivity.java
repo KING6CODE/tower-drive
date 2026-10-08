@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient());
         webView.addJavascriptInterface(new NativeAds(), "NativeAds");
+        webView.addJavascriptInterface(new Billing(this, webView), "NativeBilling");
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
         MobileAds.initialize(this, null);

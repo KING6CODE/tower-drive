@@ -841,6 +841,7 @@ function defMeta(){return{
  ws:{},wsU:{},cards:{own:{},eq:[null,null,null,null]},slots:1,
  lab:{lvl:{},cur:null,slots:1,rs:[]},mods:{lv:{atk:0,def:0,eco:0}},enh:{},
  cardPresets:{A:null,B:null,C:null}, /* [NEW P3] presets de deck */
+ iap:{noads:false,starter:false,epic:false,done:{}}, /* [NEW] achats Play Billing */
  season:{slot:-1,xp:0,cl:{},prem:false}, /* [NEW P3] saison 8 semaines */
  event:{slot:-1,prog:{},cl:{},med:0}, /* [NEW P3] événement 2 semaines + médailles */
  relics:{n:0}, /* [NEW P3] reliques permanentes */
@@ -878,6 +879,8 @@ try{
   if(!Array.isArray(M.hist))M.hist=[];
   if(typeof M.tutStage!=='number')M.tutStage=0;
   if(!M.tutSeen||typeof M.tutSeen!=='object')M.tutSeen={};
+  if(!M.iap||typeof M.iap!=='object')M.iap={noads:false,starter:false,epic:false,done:{}};
+  if(!M.iap.done)M.iap.done={};
   if(typeof M.atelierGift!=='number')M.atelierGift=0;
   if(typeof M.cardsGift!=='number')M.cardsGift=0;
   if(typeof M.gacha.pity!=='number'||isNaN(M.gacha.pity))M.gacha.pity=0; /* [NEW] */
@@ -1391,6 +1394,7 @@ function dirClaimable(){
 /* ============ pub récompensée ============ */
 var AD_DUR=3,AD_C=263.9;
 function rewardedAd(cb){
+ if(M.iap&&M.iap.noads){SFX.unlock();dirProg('ad',1);cb();return} /* [NEW] Liaison directe : récompense sans pub */
  /* [NEW] pub récompensée AdMob native via bridge NativeAds (fallback: écran simulé) */
  try{
   if(window.NativeAds&&NativeAds.isReady&&String(NativeAds.isReady())==='true'){
@@ -2005,7 +2009,7 @@ function stats(){
   pkC:N('pkC'),
   eaS:N('eaS'),ehS:N('ehS'),
   extra:0,
-  cashM:cb.cashM,coinM:cb.coinM,slow:cb.slow,ebal:cb.ebal,
+  cashM:cb.cashM,coinM:cb.coinM*iapCoinMul(),slow:cb.slow,ebal:cb.ebal,
   freeP:cb.freeP,ccoP:cb.ccoP,wskipP:cb.wskipP,
   stwM:cb.stwM,swndT:cb.swndT,waccP:cb.waccP,bersP:cb.bersP,eshN:cb.eshN
  };
@@ -2572,8 +2576,10 @@ function renderMs(){
    '</div>';
  }
  html+='<div style="text-align:center;font:500 11px Rajdhani;color:#57648F;padding:6px 0 2px">XP de saison : chaque vague terminée = +1 XP, chaque directive quotidienne = +40 XP.</div>'+
-  (prem?'':'<div style="text-align:center;padding:4px 0 8px"><button class="claimB" id="btnSeasonPass">DÉBLOQUER LE PASS — '+fmt(500)+' '+ic('gem')+'</button></div>');
+  (prem?'':'<div style="text-align:center;padding:4px 0 8px"><button class="claimB" id="btnSeasonPass">DÉBLOQUER LE PASS — '+fmt(500)+' '+ic('gem')+'</button> <button class="claimB" id="btnSeasonPay" style="margin-left:6px">'+iapPrice('season_pass')+' (+bonus)</button></div>');
  $('msList').innerHTML=html;
+ var bpp=$('btnSeasonPay');
+ if(bpp)bpp.addEventListener('click',function(){iapBuy('season_pass')});
  var bp=$('btnSeasonPass');
  if(bp)bp.addEventListener('click',function(){
   if(!canPay('gem',500)){SFX.err();toast('Pas assez de gemmes');return}
@@ -3270,6 +3276,41 @@ function renderMod(){
  }
 }
 
+/* ============ achats intégrés (Google Play Billing via bridge NativeBilling) ============ */
+var IAP_PRICES={};
+var IAP_FALLBACK={direct_link:'6,99 €',starter_pack:'2,99 €',epic_pack:'14,99 €',season_pass:'4,99 €'};
+function iapPrice(id,fb){return IAP_PRICES[id]||fb||IAP_FALLBACK[id]||'—'}
+function iapCoinMul(){
+ var m=1;
+ if(M.iap){if(M.iap.epic)m=3;else if(M.iap.starter)m=2;if(M.iap.noads)m*=1.5}
+ return m;
+}
+function iapRow(id,name,col,desc,owned){
+ return '<div class="pRow"><span class="pt" style="color:'+col+'">'+name+'</span><span class="pd">'+desc+'</span>'+
+  (owned?'<span class="price grn" style="opacity:.8">ACQUIS</span>'
+        :'<button class="price" data-iap="'+id+'">'+iapPrice(id)+'</button>')+'</div>';
+}
+function iapBuy(id){
+ if(window.NativeBilling&&NativeBilling.buy)NativeBilling.buy(id);
+ else toast('Achats disponibles dans l\'application Android');
+}
+window.__iapPrices=function(o){IAP_PRICES=o||{};try{if(M.cur==='store'||$('scrStore').classList.contains('on'))renderStore()}catch(e){}};
+window.__iapFail=function(code){if(code!==1)toast('Achat indisponible pour le moment')};
+window.__iapDone=function(sku,token,order){
+ var consumable=(sku.indexOf('gems_')===0||sku==='season_pass');
+ if(!M.iap.done[order]){ /* anti-doublon : crédit une seule fois par commande */
+  M.iap.done[order]=1;
+  if(sku.indexOf('gems_')===0){var n=+sku.slice(5)||0;M.gems+=n;toast('+'+n+' gemmes !')}
+  else if(sku==='starter_pack'){if(!M.iap.starter){M.iap.starter=true;M.gems+=150}toast('PACK DÉBUTANT activé : ×2 pièces + 150 gemmes')}
+  else if(sku==='epic_pack'){if(!M.iap.epic){M.iap.epic=true;M.gems+=750}toast('PACK ÉPIQUE activé : ×3 pièces + 750 gemmes')}
+  else if(sku==='direct_link'){M.iap.noads=true;toast('LIAISON DIRECTE activée')}
+  else if(sku==='season_pass'){seasonEnsure();M.season.prem=true;toast('PASS SAISON activé !')}
+  SFX.unlock();save();
+  try{updateCur();renderStore()}catch(e){}
+ }
+ try{NativeBilling.finish(token,consumable)}catch(e){}
+};
+
 /* ============ boutique ============ */
 var GEMPACKS=[
  {n:20,p:'0,99 €',b:0},{n:110,p:'5,99 €',b:0},
@@ -3298,25 +3339,23 @@ function renderStore(){
  html+='<div class="pRow g"><span class="pt" style="color:var(--mint)">GEMMES OFFERTES</span>'+
  '<span class="pd">'+ic('gem')+' Récompense quotidienne</span>'+
  '<button class="price grn" id="stVid"'+(canFree?'':' disabled style="opacity:.4;border-color:var(--line2);color:#7C89B8"')+'>'+ic('gem')+' RÉCLAMER</button></div>';
- html+='<div class="shopSec cGold">AMÉLIORATIONS</div>';
- html+='<div class="pRow"><span class="pt" style="color:var(--mint)">PACK DÉBUTANT</span>'+
-  '<span class="pd">'+ic('multi')+' ×2 pièces + '+ic('gem')+' 150 — indisponible</span></div>';
- html+='<div class="pRow"><span class="pt" style="color:var(--gem)">PACK ÉPIQUE</span>'+
-  '<span class="pd">'+ic('multi')+' ×3 pièces + '+ic('gem')+' 750 — indisponible</span></div>';
- html+='<div class="pRow"><span class="pt" style="color:#4FE0D8">LIAISON DIRECTE</span>'+
-  '<span class="pd">Sans pubs · ×1,5 pièces — indisponible</span></div>';
+html+='<div class="shopSec cGold">AMÉLIORATIONS</div>';
+ html+=iapRow('starter_pack','PACK DÉBUTANT','var(--mint)',ic('multi')+' ×2 pièces + '+ic('gem')+' 150',M.iap.starter||M.iap.epic);
+ html+=iapRow('epic_pack','PACK ÉPIQUE','var(--gem)',ic('multi')+' ×3 pièces + '+ic('gem')+' 750',M.iap.epic);
+ html+=iapRow('direct_link','LIAISON DIRECTE','#4FE0D8','Récompenses pub sans regarder · ×1,5 pièces',M.iap.noads);
  html+='<div class="shopSec cGem">PACKS DE GEMMES</div><div class="gGrid">';
  for(var i=0;i<GEMPACKS.length;i++){
   (function(p){
-   html+='<div class="gPack'+(p.best?' hi':'')+'">'+
+   html+='<div class="gPack'+(p.best?' hi':'')+'" data-iap="gems_'+p.n+'">'+
     (p.best?'<span class="gbest">BEST VALUE</span>':'')+
     (p.b?'<span class="gb">+'+p.b+'%</span>':'')+
     ic('gemBig')+
     '<span class="gn">× '+fmt(p.n)+'</span>'+
-    '<span class="gp">Indisponible</span></div>';
+    '<span class="gp">'+iapPrice('gems_'+p.n,p.p)+'</span></div>';
   })(GEMPACKS[i]);
  }
  html+='</div>';
+ html+='<div style="text-align:center;padding:8px 0 14px"><button class="claimB" id="stRestore" style="font-size:12px">RESTAURER MES ACHATS</button></div>';
  $('storeBody').innerHTML=html;
  var pcs=document.querySelectorAll('[data-pal]');
  for(i=0;i<pcs.length;i++){
@@ -3340,6 +3379,12 @@ function renderStore(){
    });
   })(pcs[i]);
  }
+ var ib=document.querySelectorAll('[data-iap]');
+ for(i=0;i<ib.length;i++){(function(x){x.addEventListener('click',function(){iapBuy(x.getAttribute('data-iap'))})})(ib[i])}
+ $('stRestore').addEventListener('click',function(){
+  if(window.NativeBilling&&NativeBilling.restore){NativeBilling.restore();toast('Vérification des achats…')}
+  else toast('Disponible dans l'application Android');
+ });
  $('stVid').addEventListener('click',function(){
   rewardedAd(function(){
    M.gems+=GEM_DAILY;M.daily.store=Date.now();
