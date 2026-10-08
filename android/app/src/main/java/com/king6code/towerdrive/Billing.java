@@ -75,7 +75,8 @@ public class Billing {
         client.queryProductDetailsAsync(
             QueryProductDetailsParams.newBuilder().setProductList(q).build(),
             new com.android.billingclient.api.ProductDetailsResponseListener() {
-                @Override public void onProductDetailsResponse(BillingResult r, List<ProductDetails> list) {
+                @Override public void onProductDetailsResponse(BillingResult r, com.android.billingclient.api.QueryProductDetailsResult res) {
+                    List<ProductDetails> list = res.getProductDetailsList();
                     StringBuilder sb = new StringBuilder("{");
                     for (ProductDetails d : list) {
                         products.put(d.getProductId(), d);
