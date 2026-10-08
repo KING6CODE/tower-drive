@@ -1570,7 +1570,9 @@ function enemyCash(w){
  if(w<=200)return 1+Math.floor(w/10);
  return 21+Math.floor((w-200)/20);
 }
-function waveDuration(w){return 16+1.5*(w-1)}
+/* [FIX] wiki The Tower : vague minutée, 26 s d'apparition puis 9 s de pause, quelle que soit la progression */
+var WAVE_LEN=26,WAVE_CD=9;
+function waveDuration(w){return WAVE_LEN}
 function waveBaseCount(w){return Math.min(120,17+3*(w-1))}
 var CATN=['MODULES OFFENSIFS','MODULES DÉFENSIFS','MODULES UTILITAIRES'];
 /* [NEW] pool de types débloqués par vague — utilisé par startWave + panneau CYCLE */
@@ -3709,7 +3711,7 @@ function startWave(){
   for(j=0;j<pool.length;j++){r-=pool[j][1];if(r<=0){t=pool[j][0];break}}
   var frac=(k/n);
   var tFrac=frac<.6?(frac/.6)*.55:.55+((frac-.6)/.4)*.45;
-  R.queue.push({t:t,at:tFrac*dur*rnd(.9,1.1)});
+  R.queue.push({t:t,at:Math.min(dur*.97,tFrac*dur*rnd(.9,1.1))});
  }
  R.queue.sort(function(a,b){return a.at-b.at});
  /* [NEW] garantie : au moins 1 de chaque type débloqué apparaît chaque vague */
@@ -4614,9 +4616,9 @@ function update(dt){
  if(R.queue.length){
   while(R.queue.length&&R.queue[0].at<=R.waveT){
    var item=R.queue.shift();
-   spawnEnemy(item.t);
+   if(R.enemies.length<150)spawnEnemy(item.t); /* [NEW] plafond wiki : 150 ennemis */
   }
- }else if(!R.enemies.length&&R.phase==='combat'){
+ }else if(R.phase==='combat'&&R.waveT>=R.waveDur){ /* [FIX] vague minutée : la suivante démarre même s'il reste des ennemis */
   var early=(R.wave<20?1.6:1);
   var bonus=(25*Math.pow(1.26,R.wave-1)+R.s.cashw)*(1+R.s.cashb)*R.s.cashM*(R.boost?2:1)*R.pk.cash*early;
   R.cash+=bonus;M.st.waves++;
@@ -4666,7 +4668,7 @@ function update(dt){
    toast('CYCLE '+nw+' SAUTÉ — récompenses ×1,1');
   }
   R.phase='inter';
-  R.interT=Math.max(.2,1*(1-R.s.waccP));
+  R.interT=Math.max(.5,WAVE_CD*(1-R.s.waccP));
   saveResume();
  }
  if(R.phase==='inter'){R.interT-=dt;if(R.interT<=0){R.wave++;startWave()}}
