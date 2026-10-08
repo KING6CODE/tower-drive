@@ -4166,7 +4166,7 @@ function burst(x,y,n,c){
  capParts();
 }
 function kill(e,crit){
- e.dead=true;R.kills++;R.waveKilled++;M.st.kills++;
+ e.dead=true;R.kills++;R.waveKilled++;M.st.kills++;R.noKill=0;
  deathLines(e);
  dirProg('kills',1);
  if(e.d.sab&&R.disabledW&&R.sabRef===e){
@@ -4597,6 +4597,20 @@ function update(dt){
    }
   }
  }
+ /* [FIX] anti-blocage : un recul trop fort pouvait garder les ennemis hors de portée et figer la vague à jamais */
+ if(!R.queue.length&&R.enemies.length&&R.phase==='combat'){
+  R.noKill=(R.noKill||0)+dt;
+  if(R.noKill>25){
+   R.noKill=15;
+   var rgS=R.s.range*.9,jS;
+   for(jS=0;jS<R.enemies.length;jS++){
+    var qS=R.enemies[jS];
+    if(qS.dead)continue;
+    var dxS=qS.x-200,dyS=qS.y-200,ddS=Math.hypot(dxS,dyS)||1;
+    if(ddS>rgS){qS.x=200+dxS/ddS*rgS;qS.y=200+dyS/ddS*rgS}
+   }
+  }
+ }else R.noKill=0;
  if(R.queue.length){
   while(R.queue.length&&R.queue[0].at<=R.waveT){
    var item=R.queue.shift();
