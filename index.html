@@ -1191,7 +1191,7 @@ function attachHold(b,fn){
  ['pointerup','pointerleave','pointercancel'].forEach(function(ev){b.addEventListener(ev,stop)});
 }
 function nextGoalFor(b){
- var goals=[[30,''],[60,''],[70,''],[100,'']];
+ var goals=[[30,''],[60,''],[70,''],[80,''],[100,'']];
  for(var i=0;i<goals.length;i++)if(b<goals[i][0])return goals[i];
  return[Math.ceil((b+1)/50)*50,''];
 }
@@ -2195,7 +2195,8 @@ setInterval(function(){if(screen==='battle')updateGuide()},700);
 
 /* ============ accueil ============ */
 var selTier=clamp(M.tier||0,0,11);
-function tiersUnlocked(){var n=1,i;for(i=0;i<NT-1;i++){if(M.best[i]>=(i>=9?200:100))n=i+2;else break}return Math.min(NT,n)} /* [NEW P2] P11-P12 exigent le cycle 200 */
+function tierNeed(i){return i===0?80:(i>=9?200:100)} /* [BAL] P2 dès le cycle 80 : c'est là que le Gardien bloque un joueur régulier */
+function tiersUnlocked(){var n=1,i;for(i=0;i<NT-1;i++){if(M.best[i]>=tierNeed(i))n=i+2;else break}return Math.min(NT,n)} /* [NEW P2] P11-P12 exigent le cycle 200 */
 function renderBattle(){
  ensureDirect();
  ensureArenaWeek();
@@ -2213,7 +2214,7 @@ function renderBattle(){
    b.className='tSeg'+(t===selTier?' sel':'')+(un?'':' off');
    b.innerHTML=un?'P'+(t+1):ic('slock');
    b.addEventListener('click',function(){
-    if(!un){SFX.err();toast('Terminez le cycle '+(t>=10?200:100)+' du protocole P'+t+' pour débloquer');return}
+    if(!un){SFX.err();toast('Terminez le cycle '+tierNeed(t-1)+' du protocole P'+t+' pour débloquer');return}
     selTier=t;renderBattle();SFX.buy();
    });
    seg.appendChild(b);
@@ -4232,7 +4233,7 @@ function kill(e,crit){
  }
  if(e.d.boss){
   R.boss=null;
-  var g=2+R.tier;
+  var g=(R.wave%50===0)?3+R.tier:1; /* [BAL] ~170 gemmes/jour gratuites mesurées : on réduit le drop des Gardiens pour garder de la valeur aux packs */
   M.gems+=g;R.runGems+=g;toast('+'+g+' gemmes');
   M.st.boss++;
   evProg('boss',1); /* [NEW P3] */

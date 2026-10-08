@@ -173,11 +173,11 @@ function startNewRun(){
  if(un>0&&rc.length>=2&&rc.slice(-2).every(function(r){return r.wave<12}))tier=un-1;
  startRun(tier,null,false);
  R.revived=!S.P.revive; /* si le joueur regarde les pubs : revive possible */
- S.runs++;S.cur={n:S.runs,tier:tier,t0:S.gameSec};
+ S.runs++;S.cur={n:S.runs,tier:tier,t0:S.gameSec,c0:M.st.coins,cores0:M.st.cores||0};
 }
 function finishRun(){
  var c=S.cur;if(!c)return;
- var rec={n:c.n,tier:c.tier,wave:c.wave||0,sec:Math.round(c.time||0),day:S.day};
+ var rec={n:c.n,tier:c.tier,wave:c.wave||0,sec:Math.round(c.time||0),day:S.day,coins:Math.round(M.st.coins-c.c0),killer:lastKiller,cores:(M.st.cores||0)-c.cores0};
  S.runLog.push(rec);S.recent.push(rec);if(S.recent.length>6)S.recent.shift();
  S.cur=null;
 }
@@ -248,7 +248,7 @@ function simDays(n,budgetMs){
    metaSpend();
   }
   S.day++;done++;
-  S.daily.push(snapshot());
+  var sn=snapshot();sn.coinsDay=Math.round(M.st.coins-(S.stPrev||0));S.stPrev=M.st.coins;S.daily.push(sn);
  }
  return done;
 }
