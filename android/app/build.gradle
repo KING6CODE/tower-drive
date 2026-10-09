@@ -7,8 +7,8 @@ android {
         applicationId 'com.king6code.towerdrive'
         minSdk 24
         targetSdk 36
-        versionCode 10
-        versionName '1.6'
+        versionCode 11
+        versionName '1.7'
     }
     signingConfigs {
         release {
@@ -38,4 +38,5 @@ dependencies {
     implementation 'com.google.android.gms:play-services-ads:25.5.0'
     implementation 'androidx.core:core:1.13.1'
     implementation 'com.android.billingclient:billing:8.0.0'
+    implementation 'com.google.android.ump:user-messaging-platform:3.1.0'
 }

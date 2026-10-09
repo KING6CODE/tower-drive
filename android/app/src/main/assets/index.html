@@ -465,6 +465,7 @@ button:active{transform:scale(.975)}
 @media (prefers-reduced-motion:reduce){#guideArrow,#stIco svg,#stIco::before{animation:none}}
 #ultHint{position:absolute;z-index:35;display:none;max-width:230px;padding:8px 12px;border:1.5px solid var(--amber);background:rgba(20,13,4,.96);color:#FFE2B0;font:600 13px/1.25 'Rajdhani';border-radius:3px;box-shadow:0 0 16px rgba(255,179,71,.4);pointer-events:none;animation:gbounce .9s infinite alternate ease-in-out}
 #ultHint::after{content:'▼';position:absolute;left:18px;bottom:-17px;color:var(--amber);font-size:16px;text-shadow:0 0 8px rgba(255,179,71,.9)}
+.upbtn.tut{border-color:var(--amber)!important;animation:pulseA .9s infinite alternate}
 </style>
 </head>
 <body>
@@ -714,7 +715,7 @@ button:active{transform:scale(.975)}
  <div class="ot">OFFRE LIMITÉE</div>
  <div id="stIco"></div>
  <div class="stTitle">PACK DÉBUTANT</div>
- <ul class="stList"><li>×2 pièces <b>à vie</b></li><li>+150 gemmes tout de suite</li></ul>
+ <ul class="stList"><li>×2 pièces <b>à vie</b></li><li>+150 gemmes tout de suite</li><li>Carte <b>Intro Sprint ★2</b> : démarre près de ton record</li></ul>
  <div id="stTimer"></div>
  <button class="obtn grnb" id="stBuy"></button>
  <button class="obtn mini" id="stLater">PLUS TARD</button>
@@ -909,6 +910,8 @@ function defMeta(){return{
  st:{runs:0,kills:0,coins:0,waves:0,time:0,boss:0,ups:0,evos:0,wkdm:0,cores:0}
 };}
 var M=defMeta();
+/* [SÉCU] garde-fou : pas d'outils de test dans l'application publiée */
+function devLock(){try{if(window.NativeBilling&&M&&M.dev){M.dev.open=false;M.dev.infCoins=false;M.dev.infGems=false;M.dev.infCores=false}}catch(e){}}
 try{
  var raw=localStorage.getItem(KEY)||localStorage.getItem('overcore.v20')||localStorage.getItem('overcore.v19');
  if(raw){
@@ -1538,7 +1541,7 @@ var SOLIDS={};
 var EN_ATK_BASE=1.18,EN_ATK_G=1.178;
 var EN_HP_BASE=2.35,EN_HP_G=1.22;
 /* [NEW P2] paliers étendus P1→P12 : mult ennemis ×2 par nouveau palier, pièces ×3 */
-var TIER_MULT=[1,20,60,115,230,460,920,1840,3680,7360,14720,29440];
+var TIER_MULT=[1,10,30,60,115,230,460,920,1840,3680,7360,14720]; /* [BAL] P2 x10 (avant x20 pour x5 pièces : ratio 0,25) */
 var TIER_COIN=[1,5,25,125,625,1875,5625,16875,50625,151875,455625,1366875];
 var NT=12;
 /* [NEW P2] battle conditions statiques par palier (style The Tower) — dès P8 */
@@ -1900,7 +1903,7 @@ var EDEF={
  mini:{c:'#FFDD57',sol:'tetra',r:5,hp:.22,atk:.4,sp:2.1,cash:.15,coin:0,ax:3.5,ay:5,nm:'Fragment',tip:'Issu des Dispersants'},
  tank:{c:'#A87FFF',sol:'cube',r:15,hp:5,atk:1.5,sp:.45,cash:4,coin:4,ax:.5,ay:.8,nm:'Tank',tip:'Blindé, très lent'},
  ranged:{c:'#FF62DC',sol:'octa',r:9,hp:.5,atk:1,sp:.9,cash:2,coin:2,ax:.9,ay:1.3,rng:1,nm:'Tireur',tip:'Tire à distance'},
- boss:{c:'#FF4D4D',sol:'ico',r:24,hp:20,atk:1,sp:.3,cash:25,coin:5,ax:.35,ay:.55,boss:1,nm:'Gardien',tip:'Lâche gemmes & noyaux'},
+ boss:{c:'#FF4D4D',sol:'ico',r:24,hp:20,atk:1,sp:.2,cash:25,coin:5,ax:.35,ay:.55,boss:1,nm:'Gardien',tip:'Lâche gemmes & noyaux'},
  prot:{c:'#C4D3E3',sol:'octa',r:13,hp:10,atk:1,sp:.7,cash:3,coin:3,ax:.7,ay:1,shield:1,nm:'Protecteur',tip:'Bouclier personnel destructible'},
  vamp:{c:'#C13A6B',sol:'octa',r:10,hp:2,atk:0,sp:1,cash:3,coin:4,ax:1.2,ay:1.8,vamp:1,nm:'Vampire',tip:'Vole ta régénération'},
  ray:{c:'#7DE3FF',sol:'tetra',r:9,hp:1,atk:1,sp:1,cash:2,coin:4,ax:1.4,ay:2,rng:1,ray:1,nm:'Rayon',tip:'Tir chargé puissant'},
@@ -2317,6 +2320,7 @@ $('btnAdRun').addEventListener('click',function(){ /* [FIX] bouton pub in-run en
   t0=n;taps++;
   if(taps>=7){
    taps=0;
+   if(window.NativeBilling)return; /* [SÉCU] outils de triche désactivés dans l'application publiée */
    if(!M.dev.open){M.dev.open=true;save();toast('MODE DÉVELOPPEUR activé (Réglages)');SFX.unlock()}
    else toast('Mode développeur déjà actif');
   }
@@ -3082,7 +3086,7 @@ function showPull(c,extra,extraTxt){
 /* ============ bibliothèque ============ */
 function renderCards(){
  normalizeCards();
- $('pityInfo').textContent='Pity épique : '+Math.min(M.gacha.pity||0,149)+'/150'; /* [NEW] */
+ $('pityInfo').innerHTML='Probabilités par tirage : Commun 80 % · Rare 17 % · Épique 3 %<br>Épique garanti au 150e tirage sans épique ('+Math.min(M.gacha.pity||0,149)+'/150) — une carte maximale ne sort plus'; /* [CONFORMITÉ] affichage des probabilités (règle Google Play) */
  var owned=M.cards.eq.filter(function(x){return x}).length;
  $('slotsCount').textContent=owned+'/'+M.slots;
  var sr=$('slotsRow');sr.innerHTML='';
@@ -3373,6 +3377,13 @@ function iapRow(id,name,col,desc,owned){
   (owned?'<span class="price grn" style="opacity:.8">ACQUIS</span>'
         :'<button class="price" data-iap="'+id+'">'+iapPrice(id)+'</button>')+'</div>';
 }
+/* donne une carte au niveau voulu (jamais de rétrogradation) et l'équipe si un emplacement est libre */
+function iapGiveCard(id,lv){
+ var r=M.cards.own[id];
+ if(!r||typeof r.l!=='number')M.cards.own[id]={c:0,l:lv};else if(r.l<lv)r.l=lv;
+ normalizeCards();
+ if(M.cards.eq.indexOf(id)<0){var e=M.cards.eq.indexOf(null);if(e>=0)M.cards.eq[e]=id}
+}
 function iapBuy(id){
  if(window.NativeBilling&&NativeBilling.buy)NativeBilling.buy(id);
  else toast('Achats disponibles dans l\'application Android');
@@ -3384,8 +3395,8 @@ window.__iapDone=function(sku,token,order){
  if(!M.iap.done[order]){ /* anti-doublon : crédit une seule fois par commande */
   M.iap.done[order]=1;
   if(sku.indexOf('gems_')===0){var n=+sku.slice(5)||0;M.gems+=n;toast('+'+n+' gemmes !')}
-  else if(sku==='starter_pack'){if(!M.iap.starter){M.iap.starter=true;M.gems+=150}toast('PACK DÉBUTANT activé : ×2 pièces + 150 gemmes')}
-  else if(sku==='epic_pack'){if(!M.iap.epic){M.iap.epic=true;M.gems+=750}toast('PACK ÉPIQUE activé : ×3 pièces + 750 gemmes')}
+  else if(sku==='starter_pack'){if(!M.iap.starter){M.iap.starter=true;M.gems+=150;iapGiveCard('isp',2)}toast('PACK DÉBUTANT : ×2 pièces, 150 gemmes, Intro Sprint ★2')}
+  else if(sku==='epic_pack'){if(!M.iap.epic){M.iap.epic=true;M.gems+=750;iapGiveCard('isp',4)}toast('PACK ÉPIQUE : ×3 pièces, 750 gemmes, Intro Sprint ★4')}
   else if(sku==='direct_link'){M.iap.noads=true;toast('LIAISON DIRECTE activée')}
   else if(sku==='season_pass'){seasonEnsure();M.season.prem=true;toast('PASS SAISON activé !')}
   SFX.unlock();save();
@@ -3481,8 +3492,8 @@ function renderStore(){
  '<span class="pd">'+ic('gem')+' Récompense quotidienne</span>'+
  '<button class="price grn" id="stVid"'+(canFree?'':' disabled style="opacity:.4;border-color:var(--line2);color:#7C89B8"')+'>'+ic('gem')+' RÉCLAMER</button></div>';
 html+='<div class="shopSec cGold">AMÉLIORATIONS</div>';
- html+=iapRow('starter_pack','PACK DÉBUTANT','var(--mint)',ic('multi')+' ×2 pièces + '+ic('gem')+' 150',M.iap.starter||M.iap.epic);
- html+=iapRow('epic_pack','PACK ÉPIQUE','var(--gem)',ic('multi')+' ×3 pièces + '+ic('gem')+' 750',M.iap.epic);
+ html+=iapRow('starter_pack','PACK DÉBUTANT','var(--mint)',ic('multi')+' ×2 pièces + '+ic('gem')+' 150 + Intro Sprint ★2',M.iap.starter||M.iap.epic);
+ html+=iapRow('epic_pack','PACK ÉPIQUE','var(--gem)',ic('multi')+' ×3 pièces + '+ic('gem')+' 750 + Intro Sprint ★4',M.iap.epic);
  html+=iapRow('direct_link','LIAISON DIRECTE','#4FE0D8','Récompenses pub sans regarder · ×1,5 pièces',M.iap.noads);
  html+='<div class="shopSec cGem">PACKS DE GEMMES</div><div class="gGrid">';
  for(var i=0;i<GEMPACKS.length;i++){
@@ -3624,7 +3635,7 @@ cv.addEventListener('pointerdown',function(e){
  var wx=(e.clientX-rect.left-VIEW.ox)/VIEW.sc+200;
  var wy=(e.clientY-rect.top-VIEW.oy)/VIEW.sc+200;
  /* [NEW] Bob : collecte au tap (prioritaire sur la sélection d'ennemi) */
- if(R.bob&&R.bob.life>0&&R.bobGot<10){
+ if(R.bob&&R.bob.life>0&&R.bobGot<5){
   var br=(R.s?R.s.range:90)*.6;
   var bx=200+Math.cos(R.bob.a)*br,by=200+Math.sin(R.bob.a)*br;
   if(Math.hypot(wx-bx,wy-by)<26){
@@ -3888,6 +3899,8 @@ function refreshGrid(){
   if(lvEl.textContent!==lt)lvEl.textContent=lt;
   b.classList.toggle('cant',!maxed&&R.cash<c);
  }
+ var tf=$('ru_dmg'); /* [NEW] onboarding : halo sur « Dégâts » tant que le joueur n'a pas acheté ses premiers modules */
+ if(tf)tf.classList.toggle('tut',M.st.ups<4&&!tf.classList.contains('cant'));
 }
 function buyRun(u,b){
  if(!R||!R.active||R.dying>0)return;
@@ -4444,7 +4457,7 @@ function update(dt){
   if(R.bob.life>0){
    R.bob.life-=dt;R.bob.a+=dt*.8;
    if(R.bob.life<=0)R.bob.resp=75;
-  }else if(R.bobGot<10){
+  }else if(R.bobGot<5){
    R.bob.resp-=dt;
    if(R.bob.resp<=0){R.bob.life=18;R.bob.a=rnd(TAU)}
   }
@@ -4970,7 +4983,7 @@ function draw(){
    }
   }
   /* [NEW] Bob — gemme flottante collectible */
-  if(R.bob&&R.bob.life>0&&R.bobGot<10){
+  if(R.bob&&R.bob.life>0&&R.bobGot<5){
    var br=s.range*.6;
    var bx=200+Math.cos(R.bob.a)*br,by=200+Math.sin(R.bob.a)*br;
    var puls=1+.15*Math.sin(R.time*5);
@@ -5607,6 +5620,7 @@ function openSettings(){
   '<div class="setrow between"><span>Mode daltonien</span><button class="obtn tgl'+(M.set.cb?' on':'')+'" id="sCb">'+(M.set.cb?'ON':'OFF')+'</button></div>'+
   '<button class="obtn" id="sFull">PLEIN ÉCRAN</button>'+
   '<a class="obtn" href="https://king6code.github.io/tower-drive/privacy-policy.html" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">POLITIQUE DE CONFIDENTIALITÉ</a>'+
+  ((window.NativeAds&&NativeAds.privacyRequired&&String(NativeAds.privacyRequired())==='true')?'<button class="obtn" id="sPriv">CONFIDENTIALITÉ DES PUBS</button>':'')+
   '<button class="obtn dng" id="sReset">RÉINITIALISER LA SAUVEGARDE</button>'+ 
   '<button class="obtn" id="sClose">FERMER</button>';
  if(M.dev.open){
@@ -5661,6 +5675,7 @@ function openSettings(){
   });
  }
  $('sClose').addEventListener('click',function(){$('ovSet').classList.remove('on')});
+ if($('sPriv'))$('sPriv').addEventListener('click',function(){try{NativeAds.showPrivacy()}catch(e){}});
  $('sReset').addEventListener('click',function(){
   confirmBox('Effacer TOUTE la progression ?',function(){
    _noSave=true; /* [FIX] empêche le flush débondé de réécrire la sauvegarde après effacement */
@@ -5694,7 +5709,7 @@ document.addEventListener('visibilitychange',function(){
  var st=[$('strip0'),$('strip1'),$('strip2')];
  for(i=0;i<3;i++)if(st[i])st[i].innerHTML='<i>'+slotSym(i)+'</i>';
 })();
-normalizeCards();
+normalizeCards();devLock();
 fitApp();
 applyUiScale();applyCb(); /* [NEW P4] accessibilité appliquée au démarrage */
 ensureDirect();

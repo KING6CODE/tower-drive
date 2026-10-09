@@ -9,6 +9,11 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import com.google.android.ump.ConsentForm;
+import com.google.android.ump.ConsentInformation;
+import com.google.android.ump.ConsentRequestParameters;
+import com.google.android.ump.FormError;
+import com.google.android.ump.UserMessagingPlatform;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.FullScreenContentCallback;
@@ -23,6 +28,8 @@ public class MainActivity extends Activity {
     private WebView webView;
     private RewardedAd rewardedAd;
     private boolean earned = false;
+    private ConsentInformation consent;
+    private boolean adsInited = false;
 
     /* IDs AdMob de production (compte KING6CODE) */
     private static final String AD_UNIT_REWARDED = "ca-app-pub-8086962907043995/3230517110";
@@ -45,8 +52,37 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new Billing(this, webView), "NativeBilling");
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
+        startConsentThenAds();
+    }
+
+    /* Consentement publicitaire (Google UMP, RGPD) : les pubs ne se chargent qu'une fois autorisées */
+    private void initAds() {
+        if (adsInited) return;
+        adsInited = true;
         MobileAds.initialize(this, null);
         loadRewarded();
+    }
+
+    private void startConsentThenAds() {
+        consent = UserMessagingPlatform.getConsentInformation(this);
+        ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
+        consent.requestConsentInfoUpdate(this, params,
+            new ConsentInformation.OnConsentInfoUpdateSuccessListener() {
+                @Override public void onConsentInfoUpdateSuccess() {
+                    UserMessagingPlatform.loadAndShowConsentFormIfRequired(MainActivity.this,
+                        new ConsentForm.OnConsentFormDismissedListener() {
+                            @Override public void onConsentFormDismissed(FormError error) {
+                                if (consent.canRequestAds()) initAds();
+                            }
+                        });
+                }
+            },
+            new ConsentInformation.OnConsentInfoUpdateFailureListener() {
+                @Override public void onConsentInfoUpdateFailure(FormError error) {
+                    if (consent.canRequestAds()) initAds();
+                }
+            });
+        if (consent.canRequestAds()) initAds();
     }
 
     private void loadRewarded() {
@@ -86,6 +122,20 @@ public class MainActivity extends Activity {
     /* Bridge JS exposé sous window.NativeAds */
     class NativeAds {
         @JavascriptInterface public boolean isReady() { return rewardedAd != null; }
+        @JavascriptInterface public boolean privacyRequired() {
+            return consent != null && consent.getPrivacyOptionsRequirementStatus()
+                == ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED;
+        }
+        @JavascriptInterface public void showPrivacy() {
+            runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    UserMessagingPlatform.showPrivacyOptionsForm(MainActivity.this,
+                        new ConsentForm.OnConsentFormDismissedListener() {
+                            @Override public void onConsentFormDismissed(FormError error) {}
+                        });
+                }
+            });
+        }
         @JavascriptInterface public void showRewarded() {
             runOnUiThread(new Runnable() {
                 @Override public void run() { MainActivity.this.showRewarded(); }
@@ -104,7 +154,7 @@ public class MainActivity extends Activity {
                         requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 7);
                     }
                     try { am.cancel(pi); } catch (Exception ignored) {}
-                    am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, atMs, pi);
+                    try { am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, atMs, pi); } catch (Exception ignored) {}
                 }
             });
         }

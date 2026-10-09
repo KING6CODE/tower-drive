@@ -2,9 +2,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <application android:theme="@style/AppTheme" android:label="Tower Drive" android:usesCleartextTraffic="false" android:hardwareAccelerated="true">
-        <!-- App ID AdMob de TEST Google — À REMPLACER par ton vrai App ID (ca-app-pub-XXXX~XXXX) avant la production -->
+        <!-- App ID AdMob de production (éditeur KING6CODE) : vérifier qu'il est lié à com.king6code.towerdrive dans la console AdMob -->
         <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-8086962907043995~7504804045" />
         <receiver android:name=".LabAlarmReceiver" android:exported="false" />
         <provider android:name="androidx.core.content.FileProvider" android:authorities="com.king6code.towerdrive.fileprovider" android:exported="false" android:grantUriPermissions="true">
