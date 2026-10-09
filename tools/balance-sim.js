@@ -252,7 +252,36 @@ function simDays(n,budgetMs){
  }
  return done;
 }
-window.TDSIM={setSeq:function(a){SEQ=a},setProfile:function(n,o){for(var k in o)PROFILES[n][k]=o[k]},newState:newState,simDays:simDays,snapshot:snapshot,state:function(){return S},PROFILES:PROFILES,play:play,metaSpend:metaSpend};
+
+/* Essai ciblé sur un Gardien : démarre près du boss (Intro Sprint niveau 7), joue jusqu'à la mort ou la victoire. mod = {hp:x, sp:x} */
+function bossTrial(tier,bossWave,n,mod){
+ var out=[],save0={best:M.best[tier],isp:M.cards.own.isp,eq0:M.cards.eq[0],hpm:EDEF.boss.hp,spm:EDEF.boss.sp,rev:S.P.revive};
+ mod=mod||{};
+ if(mod.hp)EDEF.boss.hp=save0.hpm*mod.hp;
+ if(mod.sp)EDEF.boss.sp=save0.spm*mod.sp;
+ M.cards.own.isp={c:0,l:7};M.cards.eq[0]='isp';M.best[tier]=Math.max(M.best[tier],bossWave+1);
+ /* le sprint saute jusqu'à floor((best-2)/10)*10+1 : on règle le record pour que le boss soit à ~9 vagues de là */
+ M.best[tier]=bossWave-8+1; // lim=best-1=bossWave-8 -> cible= floor((lim-1)/10)*10+1
+ S.P.revive=false;
+ for(var i=0;i<n;i++){
+  startRun(tier,null,false);R.revived=true;
+  var minFrac=1,passed=false,t0=0,steps=0,cap=60*480;
+  while(R&&steps<cap){
+   update(DT);steps++;
+   if(!R)break;
+   if(steps%30===0)botTick();
+   if(R&&R.boss&&R.wave===bossWave){var b=R.boss;minFrac=Math.min(minFrac,b.hp/b.maxhp)}
+   if(R&&R.wave>bossWave){passed=true;break}
+  }
+  out.push({passed:passed,minFrac:+minFrac.toFixed(3),wave:R?R.wave:bossWave,start:null});
+  if(R){R.revived=true;R.tower.hp=0;R.dead=false;R.active=false;R=null}
+ }
+ M.best[tier]=save0.best;EDEF.boss.hp=save0.hpm;EDEF.boss.sp=save0.spm;S.P.revive=save0.rev;
+ if(save0.isp)M.cards.own.isp=save0.isp;else delete M.cards.own.isp;M.cards.eq[0]=save0.eq0;
+ return out;
+}
+
+window.TDSIM={bossTrial:bossTrial,setSeq:function(a){SEQ=a},setProfile:function(n,o){for(var k in o)PROFILES[n][k]=o[k]},newState:newState,simDays:simDays,snapshot:snapshot,state:function(){return S},PROFILES:PROFILES,play:play,metaSpend:metaSpend};
 })();
 window.runAsync=function(target){if(window.__run)return 'already';window.__run=true;(function step(){if(TDSIM.state().day>=target){window.__run=false;return}TDSIM.simDays(1,1);setTimeout(step,5)})();return 'started'};
 window.prog=function(){var S=TDSIM.state();return JSON.stringify({day:S.day,running:!!window.__run,snap:S.daily[S.daily.length-1],runs:S.runLog.slice(-4).map(function(r){return 'W'+r.wave+' '+Math.round(r.sec/60)+'m'})})};
